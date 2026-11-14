@@ -1,0 +1,12 @@
+{
+  "subscription": {
+    "heading": "Purchase options",
+    "one_time": "One-time purchase",
+    "subscribe": "Subscribe & save",
+    "delivery_every": "Delivery and billing: {{ option }}",
+    "automatic_renewal": "Renews automatically. You can pause or cancel from your customer account.",
+    "select_frequency": "Delivery frequency",
+    "cart_heading": "Subscription details",
+    "cart_note": "The selected purchase option renews automatically according to the plan shown above."
+  }
+}

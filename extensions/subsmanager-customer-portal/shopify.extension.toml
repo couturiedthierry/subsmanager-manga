@@ -1,0 +1,13 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "subsmanager-customer-portal"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+
+[[extensions.targeting]]
+module = "./src/Portal.tsx"
+target = "customer-account.page.render"

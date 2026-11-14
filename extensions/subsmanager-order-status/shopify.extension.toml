@@ -1,0 +1,13 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "subsmanager-order-status"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.order-status.block.render"

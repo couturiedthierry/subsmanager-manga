@@ -1,0 +1,17 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "subsmanager-purchase-options"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+
+[[extensions.targeting]]
+module = "./src/ActionExtension.tsx"
+target = "admin.product-purchase-option.action.render"
+
+[[extensions.targeting]]
+module = "./src/ActionExtension.tsx"
+target = "admin.product-variant-purchase-option.action.render"

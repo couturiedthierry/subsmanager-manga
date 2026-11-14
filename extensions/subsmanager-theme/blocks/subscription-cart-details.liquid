@@ -1,0 +1,36 @@
+{{ 'subsmanager.css' | asset_url | stylesheet_tag }}
+
+{% assign subscription_item_count = 0 %}
+{% for item in cart.items %}
+  {% if item.selling_plan_allocation %}
+    {% assign subscription_item_count = subscription_item_count | plus: 1 %}
+  {% endif %}
+{% endfor %}
+
+{% if subscription_item_count > 0 %}
+  <aside class="subsmanager-cart" {{ block.shopify_attributes }}>
+    <h2 class="subsmanager-cart__title">{{ 'subscription.cart_heading' | t }}</h2>
+    <ul class="subsmanager-cart__list" role="list">
+      {% for item in cart.items %}
+        {% if item.selling_plan_allocation %}
+          <li>
+            <span>{{ item.product.title }}</span>
+            <strong>{{ item.selling_plan_allocation.selling_plan.name }}</strong>
+          </li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    <p class="subsmanager-widget__fine-print">{{ 'subscription.cart_note' | t }}</p>
+  </aside>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Subscription cart details",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["cart"]
+  },
+  "settings": []
+}
+{% endschema %}

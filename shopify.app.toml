@@ -1,0 +1,78 @@
+# SubsManager Manga production Shopify app configuration.
+name = "SubsManager Manga"
+client_id = ""
+application_url = "https://subsmanager-manga.onrender.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "customer_read_own_subscription_contracts,customer_write_own_subscription_contracts,read_all_orders,read_customer_payment_methods,read_orders,read_own_subscription_contracts,read_products,write_customers,write_own_subscription_contracts,write_products,write_purchase_options"
+
+[auth]
+redirect_urls = [
+  "https://subsmanager-manga.onrender.com/auth/callback",
+  "https://subsmanager-manga.onrender.com/auth/shopify/callback",
+  "https://subsmanager-manga.onrender.com/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+  # Handled by: /app/routes/webhooks.app.uninstalled.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = ["app/uninstalled"]
+
+  # Handled by: /app/routes/webhooks.app.scopes_update.tsx
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [
+    "subscription_contracts/create",
+    "subscription_contracts/update",
+    "subscription_contracts/activate",
+    "subscription_contracts/pause",
+    "subscription_contracts/cancel",
+    "subscription_contracts/fail",
+    "subscription_contracts/expire"
+  ]
+  uri = "/webhooks/subscription-contracts"
+
+  [[webhooks.subscriptions]]
+  topics = [
+    "subscription_billing_attempts/success",
+    "subscription_billing_attempts/failure"
+  ]
+  uri = "/webhooks/billing-attempts"
+
+  [[webhooks.subscriptions]]
+  topics = [
+    "selling_plan_groups/create",
+    "selling_plan_groups/update",
+    "selling_plan_groups/delete"
+  ]
+  uri = "/webhooks/selling-plan-groups"
+
+  # Webhooks can have filters
+  # Only receive webhooks for product updates with a product price >= 10.00
+  # See: https://shopify.dev/docs/apps/build/webhooks/customize/filters
+  # [[webhooks.subscriptions]]
+  # topics = ["products/update"]
+  # uri = "/webhooks/products/update"
+  # filter = "variants.price:>=10.00"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/privacy/customers"
+  compliance_topics = ["customers/data_request", "customers/redact"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/privacy/shop"
+  compliance_topics = ["shop/redact"]
+
+[pos]
+embedded = false

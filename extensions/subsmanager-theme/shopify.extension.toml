@@ -1,0 +1,6 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "SubsManager Manga storefront"
+handle = "subsmanager-theme"
+type = "theme"

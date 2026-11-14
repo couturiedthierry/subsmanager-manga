@@ -1,0 +1,221 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id                   String                 @id @default(cuid())
+  domain               String                 @unique
+  displayName          String?
+  currencyCode         String                 @default("USD")
+  onboardingComplete   Boolean                @default(false)
+  dunningRetries       Int                    @default(3)
+  retryIntervalDays    Int                    @default(3)
+  cancelAfterFailures  Boolean                @default(false)
+  supportEmail         String?
+  emailsEnabled        Boolean                @default(true)
+  emailWelcome         Boolean                @default(true)
+  emailRenewalReminder Boolean                @default(true)
+  reminderDaysBefore   Int                    @default(3)
+  emailPaymentFailed   Boolean                @default(true)
+  emailStatusChange    Boolean                @default(true)
+  showProductWidget    Boolean                @default(true)
+  portalEnabled        Boolean                @default(true)
+  portalAllowPause     Boolean                @default(true)
+  portalAllowSkip      Boolean                @default(true)
+  portalAllowCancel    Boolean                @default(true)
+  portalAllowPayment   Boolean                @default(true)
+  storefrontSyncedAt   DateTime?
+  storefrontSyncError  String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  contracts            SubscriptionContract[]
+  billingAttempts      BillingAttempt[]
+  webhookEvents        WebhookEvent[]
+  auditEvents          AuditEvent[]
+  notifications        CustomerNotification[]
+}
+
+model SubscriptionContract {
+  id                String           @id @default(cuid())
+  shopId            String
+  shopifyId         String           @unique
+  revisionId        String?
+  customerId        String?
+  customerName      String?
+  status            String           @default("ACTIVE")
+  currencyCode      String           @default("USD")
+  nextBillingAt     DateTime?
+  lastPaymentStatus String?
+  linesJson         String           @default("[]")
+  rawJson           String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  shop              Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  billingAttempts   BillingAttempt[]
+
+  @@index([shopId, status])
+  @@index([shopId, nextBillingAt])
+}
+
+model BillingAttempt {
+  id             String                @id @default(cuid())
+  shopId         String
+  contractId     String?
+  shopifyId      String?               @unique
+  idempotencyKey String?               @unique
+  status         String                @default("PENDING")
+  errorCode      String?
+  amount         Decimal?
+  currencyCode   String?
+  orderId        String?
+  ready          Boolean               @default(false)
+  attemptedAt    DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  shop           Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  contract       SubscriptionContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, attemptedAt])
+  @@index([contractId, status])
+}
+
+model SellingPlanCache {
+  id           String   @id @default(cuid())
+  shopDomain   String
+  shopifyId    String   @unique
+  name         String
+  merchantCode String?
+  status       String   @default("ACTIVE")
+  rawJson      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([shopDomain, status])
+}
+
+model WebhookEvent {
+  id          String   @id
+  shopId      String?
+  shopDomain  String
+  topic       String
+  payloadJson String?
+  processedAt DateTime @default(now())
+  shop        Shop?    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopDomain, topic])
+  @@index([processedAt])
+}
+
+enum StaffRole {
+  OWNER
+  ADMIN
+  SUPPORT
+  VIEWER
+}
+
+model StaffUser {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  name             String
+  passwordHash     String
+  role             StaffRole      @default(SUPPORT)
+  active           Boolean        @default(true)
+  mfaSecret        String?
+  mfaEnabled       Boolean        @default(false)
+  failedLoginCount Int            @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  sessions         StaffSession[]
+  auditEvents      AuditEvent[]   @relation("ActorAuditEvents")
+
+  @@index([active, role])
+}
+
+model StaffSession {
+  id          String    @id
+  userId      String
+  expiresAt   DateTime
+  mfaVerified Boolean   @default(false)
+  userAgent   String?
+  ipHash      String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  user        StaffUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model AuditEvent {
+  id           String     @id @default(cuid())
+  actorId      String?
+  actorEmail   String
+  actorRole    String
+  shopId       String?
+  shopDomain   String?
+  action       String
+  resourceType String
+  resourceId   String?
+  summary      String
+  metadataJson String?
+  ipHash       String?
+  createdAt    DateTime   @default(now())
+  actor        StaffUser? @relation("ActorAuditEvents", fields: [actorId], references: [id], onDelete: SetNull)
+  shop         Shop?      @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([shopId, createdAt])
+  @@index([action, createdAt])
+}
+
+model CustomerNotification {
+  id         String    @id @default(cuid())
+  shopId     String
+  key        String    @unique
+  type       String
+  contractId String?
+  recipient  String?
+  status     String    @default("PENDING")
+  providerId String?
+  lastError  String?
+  attempts   Int       @default(0)
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status])
+}
