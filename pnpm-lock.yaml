@@ -121,8 +121,8 @@ importers:
         specifier: 2.11.4
         version: 2.11.4(preact@10.29.8)
       '@shopify/ui-extensions':
-        specifier: 2026.7.0
-        version: 2026.7.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)
+        specifier: 2026.10.0
+        version: 2026.10.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)
       preact:
         specifier: 10.29.8
         version: 10.29.8
@@ -133,8 +133,8 @@ importers:
         specifier: 2.11.4
         version: 2.11.4(preact@10.29.8)
       '@shopify/ui-extensions':
-        specifier: 2026.7.0
-        version: 2026.7.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)
+        specifier: 2026.10.0
+        version: 2026.10.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)
       preact:
         specifier: 10.29.8
         version: 10.29.8
@@ -145,8 +145,8 @@ importers:
         specifier: 2.11.4
         version: 2.11.4(preact@10.29.8)
       '@shopify/ui-extensions':
-        specifier: 2026.7.0
-        version: 2026.7.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)
+        specifier: 2026.10.0
+        version: 2026.10.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)
       preact:
         specifier: 10.29.8
         version: 10.29.8
@@ -1583,8 +1583,8 @@ packages:
   '@shopify/storefront-api-client@1.0.10':
     resolution: {integrity: sha512-A0ItFW58L5+y/jnnJDEsmt2YcQSt2BG+pNoQOYRpPBJaOLpTj7A13q1QVrE5XYVGZCA6ZQ6FqAtgosHHrkut0Q==}
 
-  '@shopify/ui-extensions@2026.7.0':
-    resolution: {integrity: sha512-xqcExD7d5yAmTZMd+W8yB5sfB587UKobY/fPeONImZLITsEPRbUYfH9MPUHoGJ3uL+5oBYy9ZMZofysQ3vP7eQ==}
+  '@shopify/ui-extensions@2026.10.0':
+    resolution: {integrity: sha512-/wYUQ5XQf0jNCmA4GxTFe6Gh4pfMmPnbza0ch3B/6gqLeFvry0g784wo7Dq7n6sQuTnJfLtMEpRfwXmIpzLcpQ==}
     peerDependencies:
       '@preact/signals': '*'
       preact: '*'
@@ -2777,6 +2777,9 @@ packages:
 
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
+
+  htm@3.1.1:
+    resolution: {integrity: sha512-983Vyg8NwUE7JkZ6NmOqpCZ+sh1bKv2iYTlUkzlWmA5JD2acKoxd4KVxbMmxX/85mtfdnDmTFoNKcg5DGAvxNQ==}
 
   http-errors@2.0.1:
     resolution: {integrity: sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==}
@@ -5597,8 +5600,9 @@ snapshots:
     dependencies:
       '@shopify/graphql-client': 1.4.2
 
-  '@shopify/ui-extensions@2026.7.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)':
+  '@shopify/ui-extensions@2026.10.0(@preact/signals@2.11.4(preact@10.29.8))(preact@10.29.8)':
     dependencies:
+      htm: 3.1.1
       ts-morph: 25.0.1
     optionalDependencies:
       '@preact/signals': 2.11.4(preact@10.29.8)
@@ -7042,6 +7046,8 @@ snapshots:
   hermes-parser@0.25.1:
     dependencies:
       hermes-estree: 0.25.1
+
+  htm@3.1.1: {}
 
   http-errors@2.0.1:
     dependencies:
