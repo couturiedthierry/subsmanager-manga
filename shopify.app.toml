@@ -1,7 +1,7 @@
 # SubsManager Manga production Shopify app configuration.
 name = "SubsManager Manga"
 client_id = ""
-application_url = "https://subsmanager-manga.onrender.com"
+application_url = "https://subsmanager-manga-tw0q.onrender.com"
 embedded = true
 
 [build]
@@ -13,9 +13,9 @@ scopes = "customer_read_own_subscription_contracts,customer_write_own_subscripti
 
 [auth]
 redirect_urls = [
-  "https://subsmanager-manga.onrender.com/auth/callback",
-  "https://subsmanager-manga.onrender.com/auth/shopify/callback",
-  "https://subsmanager-manga.onrender.com/api/auth/callback"
+  "https://subsmanager-manga-tw0q.onrender.com/auth/callback",
+  "https://subsmanager-manga-tw0q.onrender.com/auth/shopify/callback",
+  "https://subsmanager-manga-tw0q.onrender.com/api/auth/callback"
 ]
 
 [webhooks]
