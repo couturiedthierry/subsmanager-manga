@@ -12,6 +12,10 @@ export function SubscriptionAccessBanner() {
         access requests, and request access on the Subscription APIs card. After approval, add the
         subscription permissions to the app and open it again.
       </s-paragraph>
+      <s-paragraph>
+        Using Seal Subscriptions on this store? <s-link href="/app/seal">Connect Seal</s-link> to manage
+        its subscriptions here in the meantime.
+      </s-paragraph>
     </s-banner>
   );
 }

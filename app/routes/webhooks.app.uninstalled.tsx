@@ -7,5 +7,7 @@ import db from "../db.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop } = await authenticate.webhook(request);
   await db.session.deleteMany({ where: { shop } });
+  // The Seal API token is a credential too, so it is removed with the access tokens.
+  await db.shop.updateMany({ where: { domain: shop }, data: { sealToken: null, sealConnectedAt: null } });
   return new Response();
 };

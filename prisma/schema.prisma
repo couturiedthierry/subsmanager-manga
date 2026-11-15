@@ -57,6 +57,8 @@ model Shop {
   portalAllowPayment   Boolean                @default(true)
   storefrontSyncedAt   DateTime?
   storefrontSyncError  String?
+  sealToken            String?
+  sealConnectedAt      DateTime?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   contracts            SubscriptionContract[]

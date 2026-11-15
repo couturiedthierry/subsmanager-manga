@@ -6,6 +6,10 @@ import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { graphqlRequest, throwOnUserErrors } from "../lib/graphql.server";
 import { DELETE_SELLING_PLAN_GROUP, PLANS_QUERY } from "../lib/shopify-queries";
+import { hasSubscriptionAccess } from "../lib/access.server";
+import { getSealClient } from "../models/seal-connection.server";
+import { SealApiError } from "../lib/seal.server";
+import { sealPlanDiscountLabel, sealPlanFrequencyLabel, type SealRule } from "../lib/seal-helpers";
 
 type PlansData = {
   sellingPlanGroups: {
@@ -40,15 +44,82 @@ type DeleteResult = {
   };
 };
 
+async function loadSealRules(shopDomain: string) {
+  const client = await getSealClient(shopDomain);
+  if (!client) return { connected: false, rules: [] as SealRule[], error: null as string | null };
+  try {
+    const rules: SealRule[] = [];
+    // Seal pages its rules; five pages is far more than a store normally has.
+    for (let page = 1; page <= 5; page += 1) {
+      const result = await client.listRules(page);
+      rules.push(...result.subscription_rules);
+      if (page >= result.total_pages) break;
+    }
+    return { connected: true, rules, error: null };
+  } catch (error) {
+    return {
+      connected: true,
+      rules: [] as SealRule[],
+      error: error instanceof SealApiError ? error.message : "Could not load plans from Seal",
+    };
+  }
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const data = await graphqlRequest<PlansData>(admin, PLANS_QUERY, { first: 50 });
-  return data.sellingPlanGroups;
+  const { admin, session } = await authenticate.admin(request);
+  const [data, seal] = await Promise.all([
+    graphqlRequest<PlansData>(admin, PLANS_QUERY, { first: 50 }),
+    loadSealRules(session.shop),
+  ]);
+  return {
+    nodes: data.sellingPlanGroups.nodes,
+    seal,
+    subscriptionAccess: hasSubscriptionAccess(session.scope),
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
+
+  if (formData.get("intent") === "seal-add-products") {
+    const client = await getSealClient(session.shop);
+    if (!client) return { ok: false, error: "Seal is not connected" };
+    const ruleId = Number(formData.get("ruleId"));
+    let productIds: string[] = [];
+    try {
+      productIds = JSON.parse(String(formData.get("productIds") || "[]"));
+    } catch {
+      productIds = [];
+    }
+    const products = productIds
+      .map((id) => String(id).split("/").at(-1) || "")
+      .filter((id) => /^\d+$/.test(id))
+      .map((id) => ({ product_id: id, variant_id: null }));
+    if (!Number.isSafeInteger(ruleId) || ruleId <= 0 || products.length === 0) {
+      return { ok: false, error: "Choose at least one product" };
+    }
+    try {
+      // Seal refuses the whole request if any product is already in the plan, so send only new ones.
+      const rule = await client.getRule(ruleId);
+      const already = new Set(
+        (rule?.product_variants || [])
+          .filter((entry) => entry.variant_id === null || entry.variant_id === "" || entry.variant_id === undefined)
+          .map((entry) => String(entry.product_id)),
+      );
+      const fresh = products.filter((product) => !already.has(product.product_id));
+      if (fresh.length === 0) return { ok: true, message: "Those products are already in this Seal plan" };
+      await client.appendRuleProducts(ruleId, fresh);
+      const skipped = products.length - fresh.length;
+      return {
+        ok: true,
+        message: `${fresh.length} product${fresh.length === 1 ? "" : "s"} added to the Seal plan${skipped ? ` (${skipped} already in it)` : ""}`,
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof SealApiError ? error.message : "Seal could not add the products" };
+    }
+  }
+
   const id = String(formData.get("id") || "");
   if (!id) return { ok: false, error: "Missing selling plan group ID" };
 
@@ -62,7 +133,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Plans() {
-  const { nodes: plans } = useLoaderData<typeof loader>();
+  const { nodes: plans, seal, subscriptionAccess } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
 
@@ -84,7 +155,82 @@ export default function Plans() {
         View products
       </s-button>
 
-      <s-section>
+      {seal.connected ? (
+        <s-section heading="Seal plans">
+          <s-stack direction="block" gap="base">
+            {seal.error ? <s-banner tone="critical">{seal.error}</s-banner> : null}
+            <s-paragraph color="subdued">
+              These plans are billed by Seal Subscriptions. Create new ones in Seal (Subscription rules),
+              then add products to them here.
+            </s-paragraph>
+            {seal.rules.length === 0 && !seal.error ? (
+              <s-paragraph>No Seal plans yet.</s-paragraph>
+            ) : (
+              <s-table variant="auto">
+                <s-table-header-row>
+                  <s-table-header listSlot="primary">Plan</s-table-header>
+                  <s-table-header>Delivery options</s-table-header>
+                  <s-table-header>Discount</s-table-header>
+                  <s-table-header format="numeric">Products</s-table-header>
+                  <s-table-header>Actions</s-table-header>
+                </s-table-header-row>
+                <s-table-body>
+                  {seal.rules.map((rule) => (
+                    <s-table-row key={rule.id}>
+                      <s-table-cell>
+                        <s-stack direction="block" gap="small-100">
+                          <s-text type="strong">{rule.name}</s-text>
+                          <s-text color="subdued">{rule.payment_type === "auto-charge" ? "Charged automatically" : rule.payment_type}</s-text>
+                        </s-stack>
+                      </s-table-cell>
+                      <s-table-cell>
+                        {rule.selling_plans.length ? rule.selling_plans.map(sealPlanFrequencyLabel).join(", ") : "—"}
+                      </s-table-cell>
+                      <s-table-cell>
+                        {rule.selling_plans.length
+                          ? Array.from(new Set(rule.selling_plans.map(sealPlanDiscountLabel))).join(", ")
+                          : "—"}
+                      </s-table-cell>
+                      <s-table-cell>{rule.product_variants.length}</s-table-cell>
+                      <s-table-cell>
+                        <s-button
+                          variant="tertiary"
+                          disabled={fetcher.state !== "idle"}
+                          loading={fetcher.state !== "idle" && fetcher.formData?.get("ruleId") === String(rule.id)}
+                          onClick={async () => {
+                            const selected = await shopify.resourcePicker({ type: "product", multiple: true, action: "add" });
+                            if (!selected || selected.length === 0) return;
+                            fetcher.submit(
+                              {
+                                intent: "seal-add-products",
+                                ruleId: String(rule.id),
+                                productIds: JSON.stringify(selected.map((product) => product.id)),
+                              },
+                              { method: "POST" },
+                            );
+                          }}
+                        >
+                          Add products
+                        </s-button>
+                      </s-table-cell>
+                    </s-table-row>
+                  ))}
+                </s-table-body>
+              </s-table>
+            )}
+            <s-button href="shopify://admin/apps/seal-subscriptions">Open Seal to create a plan</s-button>
+          </s-stack>
+        </s-section>
+      ) : null}
+
+      {seal.connected && !subscriptionAccess ? (
+        <s-banner tone="warning" heading="Use Seal plans for now">
+          Plans created below belong to SubsManager Manga, and their subscriptions can’t be billed until
+          Shopify approves subscription access. Until then, sell with the Seal plans above.
+        </s-banner>
+      ) : null}
+
+      <s-section heading={seal.connected ? "SubsManager Manga plans" : undefined}>
         {plans.length === 0 ? (
           <s-box padding="large" background="subdued" borderRadius="base">
             <s-stack direction="block" gap="base" alignItems="center">

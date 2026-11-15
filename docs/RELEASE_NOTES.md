@@ -3,6 +3,24 @@
 This release makes every screen and operation work end to end. Renewals stay **manual by design**:
 the app never charges a customer on its own.
 
+## Seal Subscriptions connection (new)
+Stores that use the **Seal Subscriptions** app can manage it from SubsManager Manga while Shopify's
+approval of the subscription permissions is pending (Seal already has that approval).
+- **Seal page:** paste Seal's API token (Seal → Settings → General settings → API). The token is checked
+  with Seal before it is saved, stored encrypted, and deleted when the app is uninstalled.
+- **Subscriptions:** lists Seal's subscriptions with search and status filters. Each subscription shows
+  products, upcoming orders, charge history, customer and card, with **Pause / Resume, Skip / Restore an
+  order, Charge now, Send payment update email, Cancel**. Every action is recorded in the audit log.
+- **Plans:** shows Seal's plans (frequency, discount, products) with **Add products** (products already in
+  the plan are skipped). New Seal plans are created in Seal, because Seal's API cannot create plans.
+- **Dashboard:** shows Seal's active subscriptions and per-cycle revenue.
+- The product-page widget shows any plan on a product, including Seal's, so Seal's own app embed can stay off.
+- Seal charges renewals automatically on each billing date; this is Seal's behavior, not the app's.
+- Once Shopify approves subscription access, the app switches back to its own subscriptions automatically.
+- Migration `20261115000000_seal_connection` adds the token fields and runs automatically on deploy.
+- `shopify.app.toml` now has the Client ID and only the 5 permissions allowed before approval; the full
+  permission list and the subscription webhooks are kept as comments to restore after approval.
+
 ## Renewals and charging
 - **Due detection fixed.** The app used to treat the oldest past billing cycle as "due", so almost every
   subscription showed as due and "Charge due cycle" targeted a cycle that had already been billed. It now
