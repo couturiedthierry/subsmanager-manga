@@ -59,6 +59,7 @@ model Shop {
   storefrontSyncError  String?
   sealToken            String?
   sealConnectedAt      DateTime?
+  sealManualRenewals   Boolean                @default(true)
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   contracts            SubscriptionContract[]
@@ -220,4 +221,22 @@ model CustomerNotification {
   shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId, status])
+}
+
+/// Seal renewal held by SubsManager Manga so staff can approve it before it is charged.
+model SealHeldAttempt {
+  id             String    @id @default(cuid())
+  shopDomain     String
+  subscriptionId String
+  attemptId      String
+  billingDate    DateTime
+  state          String    @default("HELD")
+  chargedAt      DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([shopDomain, attemptId])
+  @@index([shopDomain, state, billingDate])
+  @@index([shopDomain, subscriptionId])
 }

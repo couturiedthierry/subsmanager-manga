@@ -9,15 +9,83 @@ import { badgeTone, formatDate, formatMoney } from "../lib/format";
 import { getSealClient } from "../models/seal-connection.server";
 import { SealApiError } from "../lib/seal.server";
 import {
+  isSealAttemptOpen,
+  isSealAttemptSkipped,
   sealAmount,
   sealCustomerName,
   sealPastAttempts,
-  sealSkippedAttempts,
-  sealUpcomingAttempts,
+  type SealSubscription,
 } from "../lib/seal-helpers";
+import {
+  chargeHeldRenewal,
+  heldAttemptsFor,
+  holdSubscription,
+  sealManualRenewalsEnabled,
+  skipHeldRenewal,
+} from "../models/seal-renewals.server";
 import prisma from "../db.server";
 
-const INTENTS = ["pause", "resume", "cancel", "skip", "unskip", "charge", "payment-email"] as const;
+const INTENTS = [
+  "pause",
+  "resume",
+  "cancel",
+  "skip",
+  "unskip",
+  "charge",
+  "charge-due",
+  "skip-held",
+  "restore-held",
+  "payment-email",
+] as const;
+
+/** What staff see for each renewal on the schedule. */
+type ScheduleKind =
+  | "DUE"
+  | "WAITING"
+  | "CHARGING"
+  | "CHARGED"
+  | "SKIPPED_STAFF"
+  | "SKIPPED_CUSTOMER"
+  | "AUTO"
+  | "PENDING_HOLD";
+
+type ScheduleRow = { attemptId: string; date: string; kind: ScheduleKind };
+
+function buildSchedule(
+  subscription: SealSubscription,
+  holds: Awaited<ReturnType<typeof heldAttemptsFor>>,
+  manual: boolean,
+  now: number,
+): ScheduleRow[] {
+  const holdById = new Map(holds.map((hold) => [hold.attemptId, hold]));
+  const rows = new Map<string, ScheduleRow>();
+  for (const attempt of subscription.billing_attempts || []) {
+    const attemptId = String(attempt.id);
+    const hold = holdById.get(attemptId);
+    if (hold && hold.state !== "RELEASED") continue; // added from the hold below
+    if (isSealAttemptOpen(attempt)) {
+      rows.set(attemptId, { attemptId, date: attempt.date, kind: manual ? "PENDING_HOLD" : "AUTO" });
+    } else if (isSealAttemptSkipped(attempt) && !attempt.completed_at && !attempt.order_id) {
+      rows.set(attemptId, { attemptId, date: attempt.date, kind: "SKIPPED_CUSTOMER" });
+    }
+  }
+  for (const hold of holds) {
+    if (hold.state === "RELEASED") continue;
+    const date = hold.billingDate.toISOString();
+    const kind: ScheduleKind =
+      hold.state === "HELD"
+        ? hold.billingDate.getTime() <= now ? "DUE" : "WAITING"
+        : hold.state === "CHARGING"
+          ? "CHARGING"
+          : hold.state === "CHARGED"
+            ? "CHARGED"
+            : "SKIPPED_STAFF";
+    // Charged renewals older than a week move to the charge history only.
+    if (kind === "CHARGED" && hold.chargedAt && now - hold.chargedAt.getTime() > 7 * 86_400_000) continue;
+    rows.set(hold.attemptId, { attemptId: hold.attemptId, date, kind });
+  }
+  return [...rows.values()].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 12);
+}
 type Intent = (typeof INTENTS)[number];
 
 function parseId(value: string | undefined) {
@@ -34,12 +102,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   try {
     const subscription = await client.getSubscription(id);
     if (!subscription?.id) throw new Response("Subscription not found", { status: 404 });
+    const manual = await sealManualRenewalsEnabled(session.shop);
+    // Hold any renewal the scheduled job has not reached yet, so nothing is charged without approval.
+    if (manual) await holdSubscription(session.shop, client, subscription).catch(() => undefined);
+    const holds = await heldAttemptsFor(session.shop, subscription.id);
+    const now = Date.now();
+    const schedule = buildSchedule(subscription, holds, manual, now);
     return {
       subscription,
-      upcoming: sealUpcomingAttempts(subscription).slice(0, 6),
-      skipped: sealSkippedAttempts(subscription),
+      schedule,
+      manual,
+      nextDate: schedule.find((row) => ["DUE", "WAITING", "AUTO", "PENDING_HOLD"].includes(row.kind))?.date || null,
       past: sealPastAttempts(subscription).slice(0, 12),
-      loadError: null as string | null,
     };
   } catch (error) {
     if (error instanceof Response) throw error;
@@ -57,6 +131,9 @@ const SUMMARIES: Record<Intent, string> = {
   skip: "Order skipped",
   unskip: "Order restored",
   charge: "Charge requested. Seal is processing it now.",
+  "charge-due": "Renewal approved. Seal is charging it now.",
+  "skip-held": "Renewal skipped. The customer won't be charged for it.",
+  "restore-held": "Renewal restored. It needs your approval before it is charged.",
   "payment-email": "Payment update email sent to the customer",
 };
 
@@ -68,12 +145,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "") as Intent;
   if (!INTENTS.includes(intent)) return { ok: false as const, error: "Unknown subscription action" };
-  if ((intent === "charge" || intent === "cancel") && formData.get("confirmation") !== intent.toUpperCase()) {
+  const confirmations: Partial<Record<Intent, string>> = { charge: "CHARGE", cancel: "CANCEL", "charge-due": "CHARGE" };
+  if (confirmations[intent] && formData.get("confirmation") !== confirmations[intent]) {
     return { ok: false as const, error: "Please confirm this action first" };
   }
   const attemptId = Number(formData.get("attemptId"));
-  if ((intent === "skip" || intent === "unskip") && (!Number.isSafeInteger(attemptId) || attemptId <= 0)) {
-    return { ok: false as const, error: "Choose which order to skip" };
+  const needsAttempt = ["skip", "unskip", "charge-due", "skip-held", "restore-held"].includes(intent);
+  if (needsAttempt && (!Number.isSafeInteger(attemptId) || attemptId <= 0)) {
+    return { ok: false as const, error: "Choose which order this is for" };
   }
   try {
     switch (intent) {
@@ -96,6 +175,38 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       case "unskip":
         await client.updateBillingAttempt(id, attemptId, intent);
         break;
+      case "charge-due":
+        await chargeHeldRenewal(session.shop, client, id, String(attemptId));
+        break;
+      case "skip-held":
+        await skipHeldRenewal(session.shop, id, String(attemptId));
+        break;
+      case "restore-held": {
+        // The renewal stays skipped in Seal (so Seal never charges it) and waits for approval here.
+        const restored = await prisma.sealHeldAttempt.updateMany({
+          where: { shopDomain: session.shop, subscriptionId: String(id), attemptId: String(attemptId), state: "SKIPPED" },
+          data: { state: "HELD" },
+        });
+        if (restored.count === 0) {
+          const subscription = await client.getSubscription(id);
+          const attempt = (subscription.billing_attempts || []).find((entry) => entry.id === attemptId);
+          if (!attempt || attempt.completed_at || attempt.order_id || !isSealAttemptSkipped(attempt)) {
+            throw new Error("This order can't be restored anymore. Reload the page.");
+          }
+          await prisma.sealHeldAttempt.upsert({
+            where: { shopDomain_attemptId: { shopDomain: session.shop, attemptId: String(attemptId) } },
+            create: {
+              shopDomain: session.shop,
+              subscriptionId: String(id),
+              attemptId: String(attemptId),
+              billingDate: new Date(attempt.date),
+              state: "HELD",
+            },
+            update: { state: "HELD" },
+          });
+        }
+        break;
+      }
     }
     await prisma.auditEvent.create({
       data: {
@@ -112,13 +223,24 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   } catch (error) {
     return {
       ok: false as const,
-      error: error instanceof SealApiError ? error.message : "Seal could not complete this action. Try again.",
+      error: error instanceof SealApiError || error instanceof Error ? error.message : "Seal could not complete this action. Try again.",
     };
   }
 };
 
+const KIND_LABEL: Record<ScheduleKind, { label: string; tone: "warning" | "info" | "success" | "neutral" | "critical" }> = {
+  DUE: { label: "Due — needs approval", tone: "warning" },
+  WAITING: { label: "Waiting for approval", tone: "info" },
+  CHARGING: { label: "Charging", tone: "info" },
+  CHARGED: { label: "Charged", tone: "success" },
+  SKIPPED_STAFF: { label: "Skipped", tone: "neutral" },
+  SKIPPED_CUSTOMER: { label: "Skipped", tone: "neutral" },
+  AUTO: { label: "Seal charges automatically", tone: "info" },
+  PENDING_HOLD: { label: "Being held for approval", tone: "info" },
+};
+
 export default function SealSubscriptionDetail() {
-  const { subscription, upcoming, skipped, past } = useLoaderData<typeof loader>();
+  const { subscription, schedule, manual, nextDate, past } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const busy = fetcher.state !== "idle";
@@ -135,6 +257,7 @@ export default function SealSubscriptionDetail() {
 
   const submit = (intent: Intent, extra: Record<string, string> = {}) =>
     fetcher.submit({ intent, ...extra }, { method: "POST" });
+  const due = status === "ACTIVE" ? schedule.find((row) => row.kind === "DUE") : undefined;
 
   const card = subscription.card_last_digits
     ? `${(subscription.card_brand || "Card").replace(/^\w/, (c) => c.toUpperCase())} ending in ${subscription.card_last_digits}${
@@ -145,29 +268,58 @@ export default function SealSubscriptionDetail() {
   return (
     <s-page heading={`Subscription #${subscription.id}`}>
       <s-link slot="breadcrumb-actions" href="/app/subscriptions">Subscriptions</s-link>
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        disabled={busy || status !== "ACTIVE"}
-        loading={pendingIntent === "charge"}
-        onClick={() => {
-          if (window.confirm("Charge this subscription now? Seal bills the customer's saved payment method right away.")) {
-            submit("charge", { confirmation: "CHARGE" });
-          }
-        }}
-      >
-        Charge now
-      </s-button>
+      {manual ? (
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          disabled={busy || !due}
+          loading={pendingIntent === "charge-due"}
+          onClick={() => {
+            if (due && window.confirm("Has the customer approved this renewal? Seal will charge their saved payment method now.")) {
+              submit("charge-due", { attemptId: due.attemptId, confirmation: "CHARGE" });
+            }
+          }}
+        >
+          Charge due renewal
+        </s-button>
+      ) : (
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          disabled={busy || status !== "ACTIVE"}
+          loading={pendingIntent === "charge"}
+          onClick={() => {
+            if (window.confirm("Charge this subscription now? Seal bills the customer's saved payment method right away.")) {
+              submit("charge", { confirmation: "CHARGE" });
+            }
+          }}
+        >
+          Charge now
+        </s-button>
+      )}
       {status === "ACTIVE" ? (
         <s-button slot="secondary-actions" disabled={busy} onClick={() => submit("pause")}>Pause</s-button>
       ) : status === "PAUSED" ? (
         <s-button slot="secondary-actions" disabled={busy} onClick={() => submit("resume")}>Resume</s-button>
       ) : null}
 
-      <s-banner tone="info">
-        This subscription is billed by Seal Subscriptions. Seal charges it automatically on each billing date,
-        and every change here is sent to Seal.
-      </s-banner>
+      {manual ? (
+        due ? (
+          <s-banner tone="warning" heading="Renewal waiting for approval">
+            The renewal due {formatDate(due.date)} has not been charged. Contact the customer, then select
+            Charge due renewal.
+          </s-banner>
+        ) : (
+          <s-banner tone="info">
+            Renewals are charged manually. Each renewal is held in Seal and waits for your approval on its
+            billing date.
+          </s-banner>
+        )
+      ) : (
+        <s-banner tone="info">
+          This subscription is billed by Seal Subscriptions. Seal charges it automatically on each billing date.
+        </s-banner>
+      )}
       {fetcher.data && !fetcher.data.ok && fetcher.state === "idle" ? (
         <s-banner tone="critical">{fetcher.data.error}</s-banner>
       ) : null}
@@ -180,7 +332,7 @@ export default function SealSubscriptionDetail() {
           </s-stack>
           <s-stack direction="block" gap="small">
             <s-text color="subdued">Next billing date</s-text>
-            <s-text type="strong">{status === "ACTIVE" ? formatDate(upcoming[0]?.date) : "Not scheduled"}</s-text>
+            <s-text type="strong">{status === "ACTIVE" ? formatDate(nextDate) : "Not scheduled"}</s-text>
           </s-stack>
           <s-stack direction="block" gap="small">
             <s-text color="subdued">Recurring total</s-text>
@@ -233,38 +385,52 @@ export default function SealSubscriptionDetail() {
         )}
       </s-section>
 
-      <s-section heading="Upcoming orders">
-        {upcoming.length === 0 && skipped.length === 0 ? (
-          <s-paragraph color="subdued">No upcoming orders are scheduled.</s-paragraph>
+      <s-section heading="Renewals">
+        {schedule.length === 0 ? (
+          <s-paragraph color="subdued">No upcoming renewals are scheduled.</s-paragraph>
         ) : (
           <s-table variant="auto">
             <s-table-header-row>
-              <s-table-header listSlot="primary">Date</s-table-header>
+              <s-table-header listSlot="primary">Billing date</s-table-header>
               <s-table-header>Status</s-table-header>
               <s-table-header>Action</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {[...upcoming.map((attempt) => ({ attempt, isSkipped: false })), ...skipped.map((attempt) => ({ attempt, isSkipped: true }))]
-                .sort((a, b) => new Date(a.attempt.date).getTime() - new Date(b.attempt.date).getTime())
-                .map(({ attempt, isSkipped }) => (
-                  <s-table-row key={attempt.id}>
-                    <s-table-cell>{formatDate(attempt.date)}</s-table-cell>
-                    <s-table-cell>
-                      <s-badge tone={isSkipped ? "neutral" : "info"}>{isSkipped ? "Skipped" : "Scheduled"}</s-badge>
-                    </s-table-cell>
-                    <s-table-cell>
-                      {status === "ACTIVE" ? (
-                        <s-button
-                          variant="tertiary"
-                          disabled={busy}
-                          onClick={() => submit(isSkipped ? "unskip" : "skip", { attemptId: String(attempt.id) })}
-                        >
-                          {isSkipped ? "Restore" : "Skip"}
-                        </s-button>
-                      ) : null}
-                    </s-table-cell>
-                  </s-table-row>
-                ))}
+              {schedule.map((row) => (
+                <s-table-row key={row.attemptId}>
+                  <s-table-cell>{formatDate(row.date)}</s-table-cell>
+                  <s-table-cell>
+                    <s-badge tone={KIND_LABEL[row.kind].tone}>{KIND_LABEL[row.kind].label}</s-badge>
+                  </s-table-cell>
+                  <s-table-cell>
+                    {status !== "ACTIVE" ? null : row.kind === "DUE" || row.kind === "WAITING" ? (
+                      <s-button
+                        variant="tertiary"
+                        disabled={busy}
+                        onClick={() => submit("skip-held", { attemptId: row.attemptId })}
+                      >
+                        Skip
+                      </s-button>
+                    ) : row.kind === "SKIPPED_STAFF" || (row.kind === "SKIPPED_CUSTOMER" && manual) ? (
+                      <s-button
+                        variant="tertiary"
+                        disabled={busy}
+                        onClick={() => submit("restore-held", { attemptId: row.attemptId })}
+                      >
+                        Restore
+                      </s-button>
+                    ) : row.kind === "SKIPPED_CUSTOMER" ? (
+                      <s-button variant="tertiary" disabled={busy} onClick={() => submit("unskip", { attemptId: row.attemptId })}>
+                        Restore
+                      </s-button>
+                    ) : row.kind === "AUTO" ? (
+                      <s-button variant="tertiary" disabled={busy} onClick={() => submit("skip", { attemptId: row.attemptId })}>
+                        Skip
+                      </s-button>
+                    ) : null}
+                  </s-table-cell>
+                </s-table-row>
+              ))}
             </s-table-body>
           </s-table>
         )}

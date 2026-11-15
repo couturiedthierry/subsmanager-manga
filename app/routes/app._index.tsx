@@ -10,6 +10,7 @@ import { hasSubscriptionAccess } from "../lib/access.server";
 import { SubscriptionAccessBanner } from "../components/subscription-access-banner";
 import { getSealClient } from "../models/seal-connection.server";
 import { sealAmount } from "../lib/seal-helpers";
+import { dueSealSubscriptionIds } from "../models/seal-renewals.server";
 
 type DashboardData = {
   shop: { name: string; currencyCode: string };
@@ -68,19 +69,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   // While Shopify's approval is pending, show Seal's numbers if the store connected Seal.
-  let seal: { connected: boolean; active: number; more: boolean; revenue: number } = {
+  let seal: { connected: boolean; active: number; more: boolean; revenue: number; due: number } = {
     connected: false,
     active: 0,
     more: false,
     revenue: 0,
+    due: 0,
   };
   if (!subscriptionAccess) {
     const client = await getSealClient(session.shop);
     if (client) {
-      seal = { ...seal, connected: true };
+      seal = { ...seal, connected: true, due: (await dueSealSubscriptionIds(session.shop)).length };
       try {
         const page = await client.listSubscriptions({ status: "ACTIVE" });
         seal = {
+          ...seal,
           connected: true,
           active: page.subscriptions.length,
           more: Boolean(page.next_cursor),
@@ -129,6 +132,11 @@ export default function Dashboard() {
         Create plan
       </s-button>
       {!subscriptionAccess && !seal.connected ? <SubscriptionAccessBanner /> : null}
+      {seal.connected && seal.due > 0 ? (
+        <s-banner tone="warning" heading={`${seal.due} renewal${seal.due === 1 ? "" : "s"} waiting for approval`}>
+          <s-link href="/app/subscriptions?status=DUE">Review due renewals</s-link>
+        </s-banner>
+      ) : null}
       {seal.connected ? (
         <s-banner tone="info" heading="Connected to Seal Subscriptions">
           {seal.active}{seal.more ? "+" : ""} active subscription{seal.active === 1 && !seal.more ? "" : "s"} billed by Seal

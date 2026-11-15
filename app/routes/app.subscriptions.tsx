@@ -10,7 +10,9 @@ import { hasSubscriptionAccess } from "../lib/access.server";
 import { SubscriptionAccessBanner } from "../components/subscription-access-banner";
 import { getSealClient } from "../models/seal-connection.server";
 import { SealApiError } from "../lib/seal.server";
-import { sealAmount, sealCustomerName, sealNextBillingDate, type SealStatusFilter } from "../lib/seal-helpers";
+import { sealAmount, sealCustomerName, sealNextBillingDate, type SealStatusFilter, type SealSubscription } from "../lib/seal-helpers";
+import { dueSealSubscriptionIds, holdSoon, sealManualRenewalsEnabled } from "../models/seal-renewals.server";
+import prisma from "../db.server";
 
 type SubscriptionsData = {
   subscriptionContracts: {
@@ -55,26 +57,60 @@ const SEAL_STATUSES: SealStatusFilter[] = ["", "ACTIVE", "PAUSED", "CANCELLED"];
 async function loadSealRows(shopDomain: string, search: string, status: string, cursor: string | null) {
   const client = await getSealClient(shopDomain);
   if (!client) return null;
-  const sealStatus = (SEAL_STATUSES as string[]).includes(status) ? (status as SealStatusFilter) : "";
+  const manual = await sealManualRenewalsEnabled(shopDomain);
+  if (manual) holdSoon(shopDomain, client);
   try {
-    const page = await client.listSubscriptions({ query: search, cursor, status: sealStatus });
-    const rows: Row[] = page.subscriptions.map((subscription) => ({
-      key: `seal-${subscription.id}`,
-      href: `/app/subscriptions/seal/${subscription.id}`,
-      customer: sealCustomerName(subscription),
-      title: subscription.items?.find((item) => !item.is_one_time_item)?.title || subscription.items?.[0]?.title || "Subscription",
-      subtitle: subscription.delivery_interval ? `Every ${subscription.delivery_interval}` : subscription.email || "—",
-      status: String(subscription.status || "").toUpperCase(),
-      nextBillingDate: sealNextBillingDate(subscription),
-      amount: sealAmount(subscription),
-      currencyCode: subscription.currency || "USD",
-      isDue: false,
-    }));
-    return { rows, nextCursor: page.next_cursor, error: null as string | null };
+    let subscriptions: SealSubscription[];
+    let nextCursor: string | null = null;
+    if (status === "DUE") {
+      // Due renewals are known here (held renewals whose date passed), so load those subscriptions directly.
+      const ids = (await dueSealSubscriptionIds(shopDomain)).slice(0, 50);
+      subscriptions = (await Promise.all(ids.map((id) => client.getSubscription(id).catch(() => null))))
+        .filter((subscription): subscription is SealSubscription => Boolean(subscription?.id));
+      const needle = search.toLowerCase();
+      if (needle) {
+        subscriptions = subscriptions.filter((subscription) =>
+          [sealCustomerName(subscription), subscription.email].filter(Boolean).join(" ").toLowerCase().includes(needle),
+        );
+      }
+    } else {
+      const sealStatus = (SEAL_STATUSES as string[]).includes(status) ? (status as SealStatusFilter) : "";
+      const page = await client.listSubscriptions({ query: search, cursor, status: sealStatus });
+      subscriptions = page.subscriptions;
+      nextCursor = page.next_cursor;
+    }
+    const now = new Date();
+    const holds = await prisma.sealHeldAttempt.findMany({
+      where: { shopDomain, state: "HELD", subscriptionId: { in: subscriptions.map((subscription) => String(subscription.id)) } },
+      orderBy: { billingDate: "asc" },
+    });
+    const rows: Row[] = subscriptions.map((subscription) => {
+      const active = String(subscription.status || "").toUpperCase() === "ACTIVE";
+      const mine = holds.filter((hold) => hold.subscriptionId === String(subscription.id));
+      const sealNext = sealNextBillingDate(subscription);
+      const heldNext = mine[0]?.billingDate.toISOString() || null;
+      const nextBillingDate = active
+        ? [sealNext, heldNext].filter((value): value is string => Boolean(value)).sort()[0] || null
+        : null;
+      return {
+        key: `seal-${subscription.id}`,
+        href: `/app/subscriptions/seal/${subscription.id}`,
+        customer: sealCustomerName(subscription),
+        title: subscription.items?.find((item) => !item.is_one_time_item)?.title || subscription.items?.[0]?.title || "Subscription",
+        subtitle: subscription.delivery_interval ? `Every ${subscription.delivery_interval}` : subscription.email || "—",
+        status: String(subscription.status || "").toUpperCase(),
+        nextBillingDate,
+        amount: sealAmount(subscription),
+        currencyCode: subscription.currency || "USD",
+        isDue: active && mine.some((hold) => hold.billingDate <= now),
+      };
+    });
+    return { rows, nextCursor, manual, error: null as string | null };
   } catch (error) {
     return {
       rows: [] as Row[],
       nextCursor: null,
+      manual,
       error: error instanceof SealApiError ? error.message : "Could not load subscriptions from Seal",
     };
   }
@@ -189,7 +225,7 @@ export default function Subscriptions() {
             ></s-search-field>
             <s-select name="status" label="Status" value={status}>
               <s-option value="">All statuses</s-option>
-              {isSeal ? null : <s-option value="DUE">Due — waiting for approval</s-option>}
+              <s-option value="DUE">Due — waiting for approval</s-option>
               <s-option value="ACTIVE">Active</s-option>
               <s-option value="PAUSED">Paused</s-option>
               {isSeal ? null : <s-option value="FAILED">Failed</s-option>}

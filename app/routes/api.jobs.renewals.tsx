@@ -4,6 +4,7 @@ import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import { syncAllContracts } from "../models/control.server";
 import { retryFailedEmails, sendDueRenewalReminders } from "../lib/subscription-email.server";
+import { holdAllStores } from "../models/seal-renewals.server";
 
 function authorized(request: Request) {
   const expected = process.env.JOB_SECRET || "";
@@ -46,15 +47,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
+  // Stores billing through Seal with manual renewals: hold new renewals before Seal can charge them.
+  const sealHolds = await holdAllStores().catch((error) => [
+    { shop: "*", held: 0, errors: 0, subscriptions: 0, error: error instanceof Error ? error.message : "Seal hold failed" },
+  ]);
+
   // Retry customer emails that failed because the email provider was briefly unavailable.
   const emailsRetried = await retryFailedEmails().catch(() => 0);
 
   return Response.json({
-    ok: summary.every((entry) => !entry.error),
+    ok: summary.every((entry) => !entry.error) && sealHolds.every((entry) => !entry.error),
     mode: "manual-approval",
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     emailsRetried,
     shops: summary,
+    sealHolds,
   });
 };

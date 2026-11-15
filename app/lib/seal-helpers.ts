@@ -96,21 +96,31 @@ export function sealAmount(subscription: SealSubscription) {
   }, 0);
 }
 
-/** Upcoming attempts are the ones Seal has not processed yet ("" status, no completion date). */
+export function isSealAttemptSkipped(attempt: SealBillingAttempt) {
+  return String(attempt.status || "").toLowerCase().includes("skip");
+}
+
+/** A renewal Seal has not processed yet and nobody skipped. */
+export function isSealAttemptOpen(attempt: SealBillingAttempt) {
+  return !attempt.completed_at && !attempt.order_id && !attempt.error_code && !isSealAttemptSkipped(attempt);
+}
+
 export function sealUpcomingAttempts(subscription: SealSubscription) {
   return (subscription.billing_attempts || [])
-    .filter((attempt) => !attempt.completed_at && !attempt.order_id && attempt.status !== "skipped" && attempt.status !== "SKIPPED")
+    .filter(isSealAttemptOpen)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
 export function sealSkippedAttempts(subscription: SealSubscription) {
-  return (subscription.billing_attempts || []).filter((attempt) => String(attempt.status).toLowerCase() === "skipped");
+  return (subscription.billing_attempts || []).filter(
+    (attempt) => isSealAttemptSkipped(attempt) && !attempt.completed_at && !attempt.order_id,
+  );
 }
 
 export function sealPastAttempts(subscription: SealSubscription) {
   return (subscription.billing_attempts || [])
-    .filter((attempt) => attempt.completed_at || attempt.order_id || (attempt.status && String(attempt.status).toLowerCase() !== "skipped"))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .filter((attempt) => Boolean(attempt.completed_at || attempt.order_id || attempt.error_code))
+    .sort((a, b) => new Date(b.completed_at || b.date).getTime() - new Date(a.completed_at || a.date).getTime());
 }
 
 export function sealNextBillingDate(subscription: SealSubscription) {

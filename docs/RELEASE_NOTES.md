@@ -15,7 +15,15 @@ approval of the subscription permissions is pending (Seal already has that appro
   the plan are skipped). New Seal plans are created in Seal, because Seal's API cannot create plans.
 - **Dashboard:** shows Seal's active subscriptions and per-cycle revenue.
 - The product-page widget shows any plan on a product, including Seal's, so Seal's own app embed can stay off.
-- Seal charges renewals automatically on each billing date; this is Seal's behavior, not the app's.
+- **Manual renewals for Seal (on by default).** Seal has no setting to stop automatic charging, so the app
+  holds each upcoming renewal by skipping it in Seal (checked every 10 minutes by the scheduled job, when
+  Seal is connected, and whenever a subscription is opened). On the billing date the renewal shows as
+  **Due — needs approval** (dashboard, Subscriptions list with a Due filter, and the subscription page).
+  **Charge due renewal** asks Seal to charge the subscription now; a double click cannot charge twice and
+  a declined charge stays due. Staff can also Skip or Restore a held renewal. Renewals the customer skipped
+  themselves are never held. The switch on the Seal page turns this off (future holds are given back to
+  Seal) or on again; disconnecting Seal also gives future holds back.
+- Migration `20261115010000_seal_manual_renewals` adds the setting and the held-renewals table.
 - Once Shopify approves subscription access, the app switches back to its own subscriptions automatically.
 - Migration `20261115000000_seal_connection` adds the token fields and runs automatically on deploy.
 - `shopify.app.toml` now has the Client ID and only the 5 permissions allowed before approval; the full
