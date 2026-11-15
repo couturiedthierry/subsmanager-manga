@@ -1,5 +1,5 @@
 export const DASHBOARD_QUERY = `#graphql
-  query SubsManagerDashboard {
+  query SubsManagerDashboard($withContracts: Boolean!) {
     shop {
       name
       currencyCode
@@ -15,7 +15,7 @@ export const DASHBOARD_QUERY = `#graphql
         }
       }
     }
-    subscriptionContracts(first: 50, reverse: true) {
+    subscriptionContracts(first: 50, reverse: true) @include(if: $withContracts) {
       nodes {
         id
         status

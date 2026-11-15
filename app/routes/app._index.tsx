@@ -6,6 +6,8 @@ import { graphqlRequest } from "../lib/graphql.server";
 import { DASHBOARD_QUERY } from "../lib/shopify-queries";
 import { badgeTone, formatDate, formatMoney } from "../lib/format";
 import { ensureShop } from "../models/shop.server";
+import { hasSubscriptionAccess } from "../lib/access.server";
+import { SubscriptionAccessBanner } from "../components/subscription-access-banner";
 
 type DashboardData = {
   shop: { name: string; currencyCode: string };
@@ -18,7 +20,7 @@ type DashboardData = {
       sellingPlans: { nodes: Array<{ id: string; name: string }> };
     }>;
   };
-  subscriptionContracts: {
+  subscriptionContracts?: {
     nodes: Array<{
       id: string;
       status: string;
@@ -39,9 +41,12 @@ type DashboardData = {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  const apiData = await graphqlRequest<DashboardData>(admin, DASHBOARD_QUERY);
+  const subscriptionAccess = hasSubscriptionAccess(session.scope);
+  const apiData = await graphqlRequest<DashboardData>(admin, DASHBOARD_QUERY, {
+    withContracts: subscriptionAccess,
+  });
   const shop = await ensureShop(session.shop, apiData.shop.name);
-  const contracts = apiData.subscriptionContracts.nodes;
+  const contracts = apiData.subscriptionContracts?.nodes || [];
   const active = contracts.filter((contract) => contract.status === "ACTIVE");
   const due = active.filter(
     (contract) => contract.nextBillingDate && new Date(contract.nextBillingDate).getTime() <= Date.now(),
@@ -62,6 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     now: Date.now(),
+    subscriptionAccess,
     shop,
     store: apiData.shop,
     plans: apiData.sellingPlanGroups.nodes,
@@ -77,7 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Dashboard() {
-  const { now, shop, store, plans, contracts, metrics } = useLoaderData<typeof loader>();
+  const { now, subscriptionAccess, shop, store, plans, contracts, metrics } = useLoaderData<typeof loader>();
   const setupSteps = [
     { label: "Create a subscription plan", done: plans.length > 0, href: "/app/plans/new" },
     { label: "Add the storefront app block", done: shop.onboardingComplete, href: "/app/settings" },
@@ -94,6 +100,7 @@ export default function Dashboard() {
       >
         Create plan
       </s-button>
+      {!subscriptionAccess ? <SubscriptionAccessBanner /> : null}
 
       {completed < setupSteps.length && (
         <s-banner heading="Finish setting up subscriptions" tone="info">

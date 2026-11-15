@@ -1,6 +1,6 @@
 import prisma from "../db.server";
 import type { AdminGraphqlClient } from "../lib/graphql.server";
-import { graphqlRequest } from "../lib/graphql.server";
+import { graphqlRequest, isShopifyAccessError } from "../lib/graphql.server";
 import { CONTRACTS_PAGE_QUERY, PLAN_GROUPS_PAGE_QUERY } from "../lib/shopify-queries";
 import { parseContractLines } from "../lib/control-data";
 import { ensureShop } from "./shop.server";
@@ -36,10 +36,17 @@ export async function syncAllContracts(shopDomain: string, admin: AdminGraphqlCl
   let due = 0;
   const now = Date.now();
   for (let page = 0; page < MAX_SYNC_PAGES; page += 1) {
-    const data: ContractsPage = await graphqlRequest<ContractsPage>(admin, CONTRACTS_PAGE_QUERY, {
-      query: query || null,
-      after,
-    });
+    let data: ContractsPage;
+    try {
+      data = await graphqlRequest<ContractsPage>(admin, CONTRACTS_PAGE_QUERY, {
+        query: query || null,
+        after,
+      });
+    } catch (error) {
+      // Subscription access not approved yet: nothing to mirror, but don't fail the whole sync.
+      if (isShopifyAccessError(error)) return { synchronized, due, accessPending: true };
+      throw error;
+    }
     for (const contract of data.subscriptionContracts.nodes) {
       await saveContractSnapshot(shopDomain, contract);
       synchronized += 1;
@@ -54,7 +61,7 @@ export async function syncAllContracts(shopDomain: string, admin: AdminGraphqlCl
     if (!data.subscriptionContracts.pageInfo.hasNextPage) break;
     after = data.subscriptionContracts.pageInfo.endCursor;
   }
-  return { synchronized, due };
+  return { synchronized, due, accessPending: false };
 }
 
 export async function syncStoreSnapshot(shopDomain: string, admin: AdminGraphqlClient) {

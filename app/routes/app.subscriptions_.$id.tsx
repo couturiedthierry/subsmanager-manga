@@ -1,7 +1,8 @@
 // Keep subscription details outside the subscriptions index layout.
 import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { redirect, useFetcher, useLoaderData } from "react-router";
+import { hasSubscriptionAccess } from "../lib/access.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -19,6 +20,7 @@ import { contractTotal, paymentMethodLabel } from "../lib/subscription-helpers";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  if (!hasSubscriptionAccess(session.scope)) throw redirect("/app/subscriptions");
   const id = contractGid(params.id);
   await refreshPendingAttempts(session.shop, admin, id).catch(() => undefined);
   const detail = await loadContractDetail(admin, id);
@@ -34,6 +36,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  if (!hasSubscriptionAccess(session.scope)) {
+    return { ok: false as const, error: "Shopify has not approved subscription access for this app yet" };
+  }
   const id = contractGid(params.id);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");

@@ -6,6 +6,8 @@ import { authenticate } from "../shopify.server";
 import { graphqlRequest } from "../lib/graphql.server";
 import { SUBSCRIPTIONS_QUERY } from "../lib/shopify-queries";
 import { badgeTone, formatDate, formatMoney } from "../lib/format";
+import { hasSubscriptionAccess } from "../lib/access.server";
+import { SubscriptionAccessBanner } from "../components/subscription-access-banner";
 
 type SubscriptionsData = {
   subscriptionContracts: {
@@ -32,10 +34,21 @@ type SubscriptionsData = {
 const PAGE_SIZE = 50;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const search = url.searchParams.get("q")?.trim() || "";
   const status = url.searchParams.get("status")?.trim().toUpperCase() || "";
+  if (!hasSubscriptionAccess(session.scope)) {
+    return {
+      subscriptionAccess: false,
+      nodes: [] as SubscriptionsData["subscriptionContracts"]["nodes"],
+      pageInfo: { hasNextPage: false, endCursor: null as string | null },
+      search,
+      status,
+      after: null as string | null,
+      now: Date.now(),
+    };
+  }
   const after = url.searchParams.get("after") || null;
   const now = Date.now();
   // Shopify only filters contracts by status (no text search or billing-date filter),
@@ -62,6 +75,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return haystack.includes(needle);
   });
   return {
+    subscriptionAccess: true,
     nodes,
     pageInfo: data.subscriptionContracts.pageInfo,
     search,
@@ -72,7 +86,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Subscriptions() {
-  const { nodes: contracts, pageInfo, search, status, after, now } = useLoaderData<typeof loader>();
+  const { subscriptionAccess, nodes: contracts, pageInfo, search, status, after, now } = useLoaderData<typeof loader>();
   const filterRef = useRef<HTMLFormElement>(null);
   const pageLink = (cursor: string | null) => {
     const params = new URLSearchParams();
@@ -91,6 +105,7 @@ export default function Subscriptions() {
       >
         Create plan
       </s-button>
+      {!subscriptionAccess ? <SubscriptionAccessBanner /> : null}
 
       <s-section>
         <Form method="get" ref={filterRef}>
