@@ -4,14 +4,15 @@ client_id = "04496addff00ba0bee7b847cb936ef3b"
 application_url = "https://subsmanager-manga-tw0q.onrender.com"
 embedded = true
 
+# Subscriptions are billed by Seal Subscriptions, so only the product-page widget is published.
+# (The customer-portal, order-status and purchase-options extensions need Shopify's subscription access.)
+extension_directories = ["extensions/subsmanager-theme"]
+
 [build]
 automatically_update_urls_on_dev = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-# Scopes allowed before Shopify approves the Subscription APIs.
-# After approval, switch back to the full list:
-# scopes = "customer_read_own_subscription_contracts,customer_write_own_subscription_contracts,read_customer_payment_methods,read_orders,read_own_subscription_contracts,read_products,write_customers,write_own_subscription_contracts,write_products,write_purchase_options"
 scopes = "read_orders,read_products,write_customers,write_products,write_purchase_options"
 
 [auth]
@@ -33,27 +34,6 @@ api_version = "2026-07"
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
-
-  # Re-enable after Shopify approves subscription access:
-  # [[webhooks.subscriptions]]
-  # topics = [
-  # "subscription_contracts/create",
-  # "subscription_contracts/update",
-  # "subscription_contracts/activate",
-  # "subscription_contracts/pause",
-  # "subscription_contracts/cancel",
-  # "subscription_contracts/fail",
-  # "subscription_contracts/expire"
-  # ]
-  # uri = "/webhooks/subscription-contracts"
-
-  # Re-enable after Shopify approves subscription access:
-  # [[webhooks.subscriptions]]
-  # topics = [
-  # "subscription_billing_attempts/success",
-  # "subscription_billing_attempts/failure"
-  # ]
-  # uri = "/webhooks/billing-attempts"
 
   [[webhooks.subscriptions]]
   topics = [

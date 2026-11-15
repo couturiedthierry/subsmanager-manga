@@ -1,20 +1,10 @@
-/** Shown wherever subscription data would appear while Shopify's approval is pending. */
+/** Shown where subscriptions would appear when the store has not connected Seal yet. */
 export function SubscriptionAccessBanner() {
   return (
-    <s-banner tone="warning" heading="Waiting for Shopify to approve subscription access">
+    <s-banner tone="info" heading="Connect Seal Subscriptions to get started">
       <s-paragraph>
-        Shopify must approve this app’s subscription permissions before it can show or manage
-        subscriptions. Until then you can still create plans, set up the product page, and adjust
-        settings.
-      </s-paragraph>
-      <s-paragraph>
-        To request approval: in the Shopify Partner Dashboard, open Apps, choose this app, then API
-        access requests, and request access on the Subscription APIs card. After approval, add the
-        subscription permissions to the app and open it again.
-      </s-paragraph>
-      <s-paragraph>
-        Using Seal Subscriptions on this store? <s-link href="/app/seal">Connect Seal</s-link> to manage
-        its subscriptions here in the meantime.
+        SubsManager Manga manages subscriptions billed by the Seal Subscriptions app. Install Seal on this
+        store, then paste its API token on the <s-link href="/app/seal">Seal page</s-link>.
       </s-paragraph>
     </s-banner>
   );

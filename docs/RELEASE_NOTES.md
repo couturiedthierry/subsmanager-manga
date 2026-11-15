@@ -3,9 +3,12 @@
 This release makes every screen and operation work end to end. Renewals stay **manual by design**:
 the app never charges a customer on its own.
 
-## Seal Subscriptions connection (new)
-Stores that use the **Seal Subscriptions** app can manage it from SubsManager Manga while Shopify's
-approval of the subscription permissions is pending (Seal already has that approval).
+## Billing through Seal Subscriptions (new)
+SubsManager Manga now bills through the **Seal Subscriptions** app (which already has Shopify's
+subscription access) and no longer depends on Shopify approving its own subscription permissions.
+All messages about waiting for that approval were removed; screens that don't apply to Seal (the app's own
+customer emails, customer portal and plan creation) are hidden, and the dashboard shows Seal's numbers.
+Only the product-page widget extension is published (`extension_directories` in `shopify.app.toml`).
 - **Seal page:** paste Seal's API token (Seal → Settings → General settings → API). The token is checked
   with Seal before it is saved, stored encrypted, and deleted when the app is uninstalled.
 - **Subscriptions:** lists Seal's subscriptions with search and status filters. Each subscription shows
@@ -24,10 +27,9 @@ approval of the subscription permissions is pending (Seal already has that appro
   themselves are never held. The switch on the Seal page turns this off (future holds are given back to
   Seal) or on again; disconnecting Seal also gives future holds back.
 - Migration `20261115010000_seal_manual_renewals` adds the setting and the held-renewals table.
-- Once Shopify approves subscription access, the app switches back to its own subscriptions automatically.
 - Migration `20261115000000_seal_connection` adds the token fields and runs automatically on deploy.
-- `shopify.app.toml` now has the Client ID and only the 5 permissions allowed before approval; the full
-  permission list and the subscription webhooks are kept as comments to restore after approval.
+- `shopify.app.toml` and `render.yaml` now ask only for the 5 permissions the app uses: read_orders,
+  read_products, write_customers, write_products, write_purchase_options.
 
 ## Renewals and charging
 - **Due detection fixed.** The app used to treat the oldest past billing cycle as "due", so almost every

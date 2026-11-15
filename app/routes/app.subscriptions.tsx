@@ -123,7 +123,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const status = url.searchParams.get("status")?.trim().toUpperCase() || "";
   const after = url.searchParams.get("after") || null;
   if (!hasSubscriptionAccess(session.scope)) {
-    // While Shopify's approval is pending, a store that runs Seal can manage Seal's subscriptions here.
+    // Subscriptions are billed by Seal and managed here through Seal's API.
     const seal = await loadSealRows(session.shop, search, status, after);
     return {
       source: seal ? ("seal" as const) : ("none" as const),
@@ -204,7 +204,9 @@ export default function Subscriptions() {
       {isSeal ? (
         <s-button slot="primary-action" variant="primary" href="/app/plans">View plans</s-button>
       ) : (
-        <s-button slot="primary-action" variant="primary" href="/app/plans/new">Create plan</s-button>
+        <s-button slot="primary-action" variant="primary" href={source === "none" ? "/app/seal" : "/app/plans/new"}>
+          {source === "none" ? "Connect Seal" : "Create plan"}
+        </s-button>
       )}
       {source === "none" ? <SubscriptionAccessBanner /> : null}
       {isSeal ? (

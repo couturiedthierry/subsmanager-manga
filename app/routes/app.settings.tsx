@@ -7,6 +7,8 @@ import { authenticate } from "../shopify.server";
 import { getShopSettings, updateShopSettings } from "../models/shop.server";
 import { syncStorefrontSettings } from "../models/storefront-settings.server";
 import { emailConfigured as isEmailConfigured, recentEmails, sendTestEmail } from "../lib/subscription-email.server";
+import { hasSubscriptionAccess, REQUIRED_SCOPES } from "../lib/access.server";
+import { sealConnectionStatus } from "../models/seal-connection.server";
 
 function hasGrantedScope(grantedScopes: Set<string>, requiredScope: string) {
   if (grantedScopes.has(requiredScope)) return true;
@@ -25,10 +27,7 @@ function hasGrantedScope(grantedScopes: Set<string>, requiredScope: string) {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const settings = await getShopSettings(session.shop);
-  const requiredScopes = (process.env.SCOPES || "")
-    .split(",")
-    .map((scope) => scope.trim())
-    .filter(Boolean);
+  const requiredScopes = REQUIRED_SCOPES;
   const grantedScopes = new Set(
     (session.scope || "")
       .split(",")
@@ -41,6 +40,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     emailConfigured: isEmailConfigured(),
     emails: await recentEmails(session.shop),
     missingScopes: requiredScopes.filter((scope) => !hasGrantedScope(grantedScopes, scope)),
+    sealMode: !hasSubscriptionAccess(session.scope),
+    sealConnected: (await sealConnectionStatus(session.shop)).connected,
   };
 };
 
@@ -106,13 +107,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     : {};
 
+  // In Seal mode the email and portal sections are hidden (Seal handles both), so keep their saved values.
+  const sealMode = !hasSubscriptionAccess(session.scope);
   const saved = await updateShopSettings(session.shop, {
     showProductWidget: formData.get("showProductWidget") === "on",
-    portalEnabled,
-    ...portalChoices,
-    emailsEnabled,
-    ...emailChoices,
-    supportEmail,
+    ...(sealMode ? {} : { portalEnabled, ...portalChoices, emailsEnabled, ...emailChoices, supportEmail }),
     dunningRetries,
     retryIntervalDays,
     cancelAfterFailures: formData.get("cancelAfterFailures") === "on",
@@ -137,7 +136,7 @@ const EMAIL_LABELS: Record<string, string> = {
 };
 
 export default function Settings() {
-  const { settings, apiKey, emailConfigured, emails, missingScopes } = useLoaderData<typeof loader>();
+  const { settings, apiKey, emailConfigured, emails, missingScopes, sealMode, sealConnected } = useLoaderData<typeof loader>();
   const [emailsOn, setEmailsOn] = useState(settings.emailsEnabled);
   const [portalOn, setPortalOn] = useState(settings.portalEnabled);
   const testFetcher = useFetcher<typeof action>();
@@ -168,13 +167,28 @@ export default function Settings() {
       <Form method="post" ref={formRef}>
         <s-stack direction="block" gap="base">
           {actionData?.error && <s-banner tone="critical">{actionData.error}</s-banner>}
+          {sealMode ? (
+            <s-banner tone="info" heading={sealConnected ? "Seal handles customer emails and the customer portal" : "Connect Seal Subscriptions"}>
+              {sealConnected
+                ? "Seal sends the subscription emails to customers and gives them their manage-subscription portal. Set those up in Seal → Settings. The product page switch below still controls the SubsManager Manga widget."
+                : "Subscriptions are billed by the Seal Subscriptions app. Connect it on the Seal page first."}
+            </s-banner>
+          ) : null}
 
           <s-section heading="Renewals and failed payments">
             <s-stack direction="block" gap="base">
-              <s-banner tone="info">
-                Renewals are never charged automatically. When a billing date passes, the subscription
-                shows as due. After the customer approves, open it and select Charge due cycle.
-              </s-banner>
+              {sealMode ? (
+                <s-banner tone="info">
+                  Renewals are billed by Seal Subscriptions. With manual renewals on (on the{" "}
+                  <s-link href="/app/seal">Seal page</s-link>), each renewal shows as due on its billing date and is
+                  charged only when you select Charge due renewal.
+                </s-banner>
+              ) : (
+                <s-banner tone="info">
+                  Renewals are never charged automatically. When a billing date passes, the subscription
+                  shows as due. After the customer approves, open it and select Charge due cycle.
+                </s-banner>
+              )}
               <s-grid gridTemplateColumns="1fr 1fr" gap="base">
                 <s-number-field
                   name="dunningRetries"
@@ -199,6 +213,7 @@ export default function Settings() {
             </s-stack>
           </s-section>
 
+          {!sealMode ? (
           <s-section heading="Customer emails">
             <s-stack direction="block" gap="base">
               {!emailConfigured ? (
@@ -267,8 +282,9 @@ export default function Settings() {
               ></s-email-field>
             </s-stack>
           </s-section>
+          ) : null}
 
-          <s-section heading="Product page and customer portal">
+          <s-section heading={sealMode ? "Product page" : "Product page and customer portal"}>
             <s-stack direction="block" gap="base">
               {settings.storefrontSyncError ? (
                 <s-banner tone="warning" heading="Your storefront is not up to date">
@@ -283,6 +299,8 @@ export default function Settings() {
                 details="When off, the subscription picker is hidden and products sell as one-time purchases. Products that can only be bought as a subscription still show it."
                 defaultChecked={settings.showProductWidget}
               ></s-switch>
+              {!sealMode ? (
+                <>
               <s-divider></s-divider>
               <s-switch
                 name="portalEnabled"
@@ -299,31 +317,37 @@ export default function Settings() {
                 <s-switch name="portalAllowCancel" value="on" label="Cancel" details="Turn off to have customers contact you to cancel." defaultChecked={settings.portalAllowCancel} disabled={!portalOn}></s-switch>
                 <s-switch name="portalAllowPayment" value="on" label="Update their payment method" defaultChecked={settings.portalAllowPayment} disabled={!portalOn}></s-switch>
               </s-stack>
+                </>
+              ) : null}
             </s-stack>
           </s-section>
 
           <s-section heading="Install on your store">
             <s-stack direction="block" gap="base">
               <s-paragraph>
-                Add the purchase selector to product templates and subscription details to the cart,
-                then add SubsManager Manga’s subscription page to customer accounts so buyers can manage every
-                contract without contacting staff.
+                {sealMode
+                  ? "Add the subscription selector to your product template and subscription details to the cart. Turn off Seal’s own app embed so only this widget shows."
+                  : "Add the purchase selector to product templates and subscription details to the cart, then add SubsManager Manga’s subscription page to customer accounts so buyers can manage every contract without contacting staff."}
               </s-paragraph>
               <s-button-group>
                 <s-button href={productEditorUrl} variant="primary">Add product selector</s-button>
                 <s-button href={cartEditorUrl}>Add cart details</s-button>
-                <s-button href="shopify://admin/settings/customer_accounts">Set up customer portal</s-button>
+                {!sealMode ? <s-button href="shopify://admin/settings/customer_accounts">Set up customer portal</s-button> : null}
               </s-button-group>
+              {!sealMode ? (
               <s-banner tone="info" heading="Customer portal activation">
                 In Customer accounts, choose Customize, add SubsManager Manga’s Manage subscriptions app page,
                 and add it to the customer-account header menu. In the checkout and accounts editor,
                 also add SubsManager Manga’s subscription block to Order status. Publishing the app version alone
                 does not activate these merchant-controlled placements.
               </s-banner>
+              ) : null}
               <s-checkbox
                 name="onboardingComplete"
                 value="on"
-                label="I installed and tested the product selector, cart details, customer portal, and order-status block"
+                label={sealMode
+                  ? "I installed and tested the product selector and cart details"
+                  : "I installed and tested the product selector, cart details, customer portal, and order-status block"}
                 defaultChecked={settings.onboardingComplete}
               ></s-checkbox>
             </s-stack>
@@ -353,15 +377,24 @@ export default function Settings() {
             <s-text>API version</s-text>
             <s-badge tone="info">2026-07</s-badge>
           </s-stack>
+          {!sealMode ? (
           <s-stack direction="inline" justifyContent="space-between">
             <s-text>Customer emails</s-text>
             <s-badge tone={!emailConfigured ? "warning" : settings.emailsEnabled ? "success" : "neutral"}>
               {!emailConfigured ? "Setup required" : settings.emailsEnabled ? "On" : "Off"}
             </s-badge>
           </s-stack>
+          ) : (
+            <s-stack direction="inline" justifyContent="space-between">
+              <s-text>Seal Subscriptions</s-text>
+              <s-badge tone={sealConnected ? "success" : "warning"}>{sealConnected ? "Connected" : "Not connected"}</s-badge>
+            </s-stack>
+          )}
         </s-stack>
       </s-section>
 
+      {!sealMode ? (
+        <>
       <s-section slot="aside" heading="Send a test email">
         <testFetcher.Form method="post">
           <input type="hidden" name="intent" value="test-email" />
@@ -401,20 +434,22 @@ export default function Settings() {
           </s-stack>
         )}
       </s-section>
+        </>
+      ) : null}
 
       <s-section slot="aside" heading="App updates">
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" justifyContent="space-between">
             <s-text>Required permissions</s-text>
             <s-badge tone={missingScopes.length ? "warning" : "success"}>
-              {missingScopes.length ? "Approval required" : "Up to date"}
+              {missingScopes.length ? "Update needed" : "Up to date"}
             </s-badge>
           </s-stack>
           {missingScopes.length ? (
             <>
               <s-paragraph color="subdued">
-                Shopify needs approval for these permissions. Reopen SubsManager Manga from Shopify Admin and
-                accept the permission prompt; do not uninstall the app.
+                Reopen SubsManager Manga from Shopify Admin and accept the permission prompt to grant these
+                permissions; do not uninstall the app.
               </s-paragraph>
               <s-unordered-list>
                 {missingScopes.map((scope) => <s-list-item key={scope}>{scope}</s-list-item>)}

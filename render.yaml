@@ -25,7 +25,7 @@ services:
       - key: SHOPIFY_APP_URL
         sync: false
       - key: SCOPES
-        value: customer_read_own_subscription_contracts,customer_write_own_subscription_contracts,read_customer_payment_methods,read_orders,read_own_subscription_contracts,read_products,write_customers,write_own_subscription_contracts,write_products,write_purchase_options
+        value: read_orders,read_products,write_customers,write_products,write_purchase_options
       - key: CONTROL_ADMIN_EMAIL
         sync: false
       - key: CONTROL_ADMIN_PASSWORD

@@ -9,6 +9,7 @@ import { DELETE_SELLING_PLAN_GROUP, PLANS_QUERY } from "../lib/shopify-queries";
 import { hasSubscriptionAccess } from "../lib/access.server";
 import { getSealClient } from "../models/seal-connection.server";
 import { SealApiError } from "../lib/seal.server";
+import { SubscriptionAccessBanner } from "../components/subscription-access-banner";
 import { sealPlanDiscountLabel, sealPlanFrequencyLabel, type SealRule } from "../lib/seal-helpers";
 
 type PlansData = {
@@ -143,14 +144,16 @@ export default function Plans() {
   }, [fetcher.data, shopify]);
 
   return (
-    <s-page heading="Selling plans">
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        href="/app/plans/new"
-      >
-        Create plan
-      </s-button>
+    <s-page heading="Plans">
+      {subscriptionAccess ? (
+        <s-button slot="primary-action" variant="primary" href="/app/plans/new">Create plan</s-button>
+      ) : seal.connected ? (
+        <s-button slot="primary-action" variant="primary" href="shopify://admin/apps/seal-subscriptions">
+          Create plan in Seal
+        </s-button>
+      ) : (
+        <s-button slot="primary-action" variant="primary" href="/app/seal">Connect Seal</s-button>
+      )}
       <s-button slot="secondary-actions" href="shopify://admin/products">
         View products
       </s-button>
@@ -223,13 +226,16 @@ export default function Plans() {
         </s-section>
       ) : null}
 
-      {seal.connected && !subscriptionAccess ? (
-        <s-banner tone="warning" heading="Use Seal plans for now">
-          Plans created below belong to SubsManager Manga, and their subscriptions can’t be billed until
-          Shopify approves subscription access. Until then, sell with the Seal plans above.
+      {!subscriptionAccess && !seal.connected ? <SubscriptionAccessBanner /> : null}
+
+      {!subscriptionAccess && plans.length > 0 ? (
+        <s-banner tone="warning" heading="Plans that can’t be billed">
+          These older plans were created by SubsManager Manga itself and can’t bill customers. Delete them
+          and sell with Seal plans instead.
         </s-banner>
       ) : null}
 
+      {subscriptionAccess || plans.length > 0 ? (
       <s-section heading={seal.connected ? "SubsManager Manga plans" : undefined}>
         {plans.length === 0 ? (
           <s-box padding="large" background="subdued" borderRadius="base">
@@ -323,11 +329,13 @@ export default function Plans() {
           </s-table>
         )}
       </s-section>
+      ) : null}
 
-      <s-section slot="aside" heading="Shopify-native plans">
+      <s-section slot="aside" heading="How plans work">
         <s-paragraph>
-          Every offer is stored as a Shopify selling plan group. Checkout, payment vaulting, taxes,
-          and the resulting subscription contract stay inside Shopify.
+          {subscriptionAccess
+            ? "Every offer is stored as a Shopify selling plan group. Checkout, payment vaulting, taxes, and the resulting subscription contract stay inside Shopify."
+            : "Plans are created in Seal Subscriptions and shown on your product pages by the SubsManager Manga widget. Seal processes the payments; you approve each renewal here."}
         </s-paragraph>
       </s-section>
     </s-page>
