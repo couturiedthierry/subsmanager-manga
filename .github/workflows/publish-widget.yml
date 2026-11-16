@@ -1,0 +1,25 @@
+# Publishes the app's Shopify extensions (the product-page widget) to Shopify.
+# Run it from GitHub: Actions → "Publish widget to Shopify" → Run workflow.
+# Needs the repository secret SHOPIFY_SERVICE_ACCOUNT_TOKEN (a Shopify service account with the
+# "App development" permission for this app).
+name: Publish widget to Shopify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy to Shopify
+        env:
+          SHOPIFY_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+        run: pnpm exec shopify app deploy --allow-updates --source-control-url "$COMMIT_URL"
