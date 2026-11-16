@@ -18,8 +18,12 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Service-account tokens need Shopify CLI 5 or newer (Shopify's CI/CD guide installs the latest CLI).
+      - run: npm install -g @shopify/cli@latest
       - name: Deploy to Shopify
         env:
           SHOPIFY_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN }}
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
-        run: pnpm exec shopify app deploy --allow-updates --source-control-url "$COMMIT_URL"
+        run: |
+          shopify version
+          shopify app deploy --allow-updates --source-control-url "$COMMIT_URL"
