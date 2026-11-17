@@ -326,7 +326,7 @@ export default function WidgetPage() {
           ></s-text-field>
           {knownNames.length === 0 ? (
             <s-paragraph color="subdued">
-              No plans found yet. Add a frequency name below (as it appears on the widget) to rename it.
+              No plans found yet. Create a plan in Seal; its frequencies will be listed here to rename.
             </s-paragraph>
           ) : (
             <s-table variant="list">
@@ -354,8 +354,8 @@ export default function WidgetPage() {
           )}
           <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="end">
             <s-text-field
-              label="Add another frequency name"
-              placeholder="e.g. 6 weeks"
+              label="Rename a frequency that isn’t listed"
+              placeholder="Its name in the plan, e.g. 6 weeks"
               value={newName}
               onInput={(event) => setNewName(event.currentTarget.value)}
             ></s-text-field>
@@ -369,7 +369,10 @@ export default function WidgetPage() {
               Add
             </s-button>
           </s-grid>
-          <s-paragraph color="subdued">Leave “Show as” empty to keep the plan’s own name.</s-paragraph>
+          <s-paragraph color="subdued">
+            Leave “Show as” empty to keep the plan’s own name. This only renames frequencies; to offer a new one
+            (for example every 2 months), add it to the plan in Seal and it appears here and on the widget.
+          </s-paragraph>
         </s-stack>
       </s-section>
 
