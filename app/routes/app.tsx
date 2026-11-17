@@ -22,6 +22,7 @@ export default function App() {
         <s-link href="/app/plans">Plans</s-link>
         <s-link href="/app/subscriptions">Subscriptions</s-link>
         <s-link href="/app/analytics">Analytics</s-link>
+        <s-link href="/app/widget">Widget</s-link>
         <s-link href="/app/seal">Seal</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>

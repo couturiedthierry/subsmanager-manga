@@ -3,6 +3,7 @@ import prisma from "../db.server";
 import type { AdminGraphqlClient } from "../lib/graphql.server";
 import { graphqlRequest, throwOnUserErrors } from "../lib/graphql.server";
 import { CREATE_SETTINGS_DEFINITION, SET_METAFIELDS, SHOP_ID_QUERY } from "../lib/shopify-queries";
+import { parseStoredWidget, widgetClassList, widgetStyleAttribute } from "../lib/widget-settings";
 
 /**
  * The storefront and customer-portal switches are stored on the shop as a JSON metafield.
@@ -14,8 +15,12 @@ export const SETTINGS_NAMESPACE = "subsmanager";
 export const SETTINGS_KEY = "settings";
 
 export function storefrontPayload(shop: Shop) {
+  const widget = parseStoredWidget(shop.widgetSettings);
   return {
     productWidget: shop.showProductWidget,
+    // Design and texts of the product-page widget (Widget page). style and classes are
+    // pre-built here so the theme block only prints validated values.
+    widget: { ...widget, style: widgetStyleAttribute(widget), classes: widgetClassList(widget) },
     portal: {
       enabled: shop.portalEnabled,
       pause: shop.portalAllowPause,

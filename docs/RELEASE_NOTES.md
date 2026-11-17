@@ -3,6 +3,21 @@
 This release makes every screen and operation work end to end. Renewals stay **manual by design**:
 the app never charges a customer on its own.
 
+## Widget page: full control of the product-page widget (new)
+A new **Widget** page in the app controls the storefront widget, with a live, clickable preview
+(desktop/mobile) that runs the real storefront code:
+- **Purchase options:** subscription or one-time, or **subscription only** (the one-time option and the
+  subscription radio button are hidden); default selection; order; frequencies as buttons, a list, or a dropdown.
+- **Texts:** heading, option names, frequency label, saving text, badge, up to 5 benefits, note.
+- **Show or hide:** badge, prices, crossed-out price, benefits, frequency label, savings, note.
+- **Colors** (13, most can use the theme's color), **size and spacing** (text size, radius, border width,
+  inner spacing, gap, max width, space above/below).
+- **Custom code:** an extra CSS class on the widget and a Custom CSS field, with the list of class names.
+Settings are saved in the shop metafield, so changes apply to every product page immediately with no
+republishing. All values are validated (colors, numbers, class names; "<" is removed from custom CSS).
+The theme editor block now only has the product picker (Shopify allows at most 25 settings per app block).
+Migration `20261117000000_widget_settings` adds the settings column.
+
 ## Billing through Seal Subscriptions (new)
 SubsManager Manga now bills through the **Seal Subscriptions** app (which already has Shopify's
 subscription access) and no longer depends on Shopify approving its own subscription permissions.

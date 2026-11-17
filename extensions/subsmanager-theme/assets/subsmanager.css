@@ -1,16 +1,31 @@
-/* ---------- Product page purchase options ---------- */
+/* ---------- Product page purchase options ----------
+   Every value below can be changed on the app's Widget page (it sets the --sm-* variables),
+   and any rule can be overridden with Custom CSS there. Class names:
+   .sm-widget  .sm-widget__heading  .sm-option  .sm-option--subscription  .sm-option--one-time
+   .sm-option.is-selected  .sm-option__head  .sm-radio  .sm-option__title  .sm-option__price
+   .sm-compare  .sm-subscription-price  .sm-one-time-price  .sm-badge  .sm-option__body
+   .sm-benefits  .sm-benefit  .sm-frequency-label  .sm-frequencies  .sm-frequency
+   .sm-frequency__label  .sm-frequency__saving  .sm-frequency-select  .sm-note */
 .sm-widget {
   --sm-accent: #23395d;
   --sm-accent-text: #ffffff;
   --sm-surface: #fdf7ef;
   --sm-border: #e9dcc9;
+  --sm-freq-bg: #ffffff;
+  --sm-border-width: 1px;
   --sm-radius: 10px;
-  color: inherit;
+  --sm-pad: 16px;
+  --sm-gap: 12px;
+  --sm-mt: 16px;
+  --sm-mb: 20px;
+  color: var(--sm-text, inherit);
   display: flex;
   flex-direction: column;
   font: inherit;
-  gap: 0.75rem;
-  margin-block: 1rem 1.25rem;
+  font-size: var(--sm-font-size, inherit);
+  gap: var(--sm-gap);
+  margin-block: var(--sm-mt) var(--sm-mb);
+  max-width: var(--sm-max-width, none);
 }
 
 .sm-widget--one-time-first .sm-option--one-time { order: -1; }
@@ -18,13 +33,14 @@
 .sm-widget--one-time-first .sm-widget__heading { order: -2; }
 
 .sm-widget__heading {
+  color: var(--sm-heading, inherit);
   font-weight: 650;
   margin: 0;
 }
 
 .sm-option {
-  background: transparent;
-  border: 1px solid var(--sm-border);
+  background: var(--sm-option-bg, transparent);
+  border: var(--sm-border-width) solid var(--sm-border);
   border-radius: var(--sm-radius);
   display: block;
   position: relative;
@@ -33,7 +49,7 @@
 
 .sm-option.is-selected {
   background: var(--sm-surface);
-  border-color: color-mix(in srgb, var(--sm-border) 55%, var(--sm-accent));
+  border-color: var(--sm-border-selected, color-mix(in srgb, var(--sm-border) 55%, var(--sm-accent)));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
@@ -42,10 +58,8 @@
   cursor: pointer;
   display: flex;
   gap: 0.7rem;
-  padding: 0.95rem 1rem;
+  padding: calc(var(--sm-pad) * 0.95) var(--sm-pad);
 }
-
-.sm-option--subscription .sm-option__head { padding-top: 1.05rem; }
 
 .sm-radio {
   accent-color: var(--sm-accent);
@@ -76,27 +90,35 @@
   text-decoration: line-through;
 }
 
+.sm-widget--no-prices .sm-option__price,
+.sm-widget--no-compare .sm-compare { display: none !important; }
+
 .sm-badge {
-  background: var(--sm-accent);
-  border-radius: 0 calc(var(--sm-radius) - 1px) 0 var(--sm-radius);
-  color: var(--sm-accent-text);
+  background: var(--sm-badge-bg, var(--sm-accent));
+  border-radius: 0 calc(var(--sm-radius) - var(--sm-border-width)) 0 var(--sm-radius);
+  color: var(--sm-badge-text, var(--sm-accent-text));
   font-size: 0.66em;
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 0.3rem 0.65rem;
   position: absolute;
-  right: -1px;
+  right: calc(var(--sm-border-width) * -1);
   text-transform: uppercase;
-  top: -1px;
+  top: calc(var(--sm-border-width) * -1);
 }
 
 .sm-option__body {
   cursor: default;
-  padding: 0 1rem 1rem calc(1rem + 1.05rem + 0.7rem);
+  padding: 0 var(--sm-pad) var(--sm-pad) calc(var(--sm-pad) + 1.05rem + 0.7rem);
 }
 
 /* Benefits and frequencies show only while the subscription option is selected. */
 .sm-option--subscription:not(.is-selected) .sm-option__body { display: none; }
+
+/* Subscription only: no one-time option, so the subscription choice needs no radio button. */
+.sm-widget--subscription-only .sm-option--subscription .sm-radio { display: none; }
+.sm-widget--subscription-only .sm-option--subscription .sm-option__head { cursor: default; }
+.sm-widget--subscription-only .sm-option__body { padding-left: var(--sm-pad); }
 
 .sm-benefits {
   display: grid;
@@ -115,7 +137,7 @@
 }
 
 .sm-benefits svg {
-  color: var(--sm-accent);
+  color: var(--sm-icon, var(--sm-accent));
   flex: 0 0 auto;
   opacity: 0.8;
 }
@@ -134,9 +156,10 @@
 
 .sm-frequency {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid var(--sm-border);
-  border-radius: calc(var(--sm-radius) - 2px);
+  background: var(--sm-freq-bg);
+  border: var(--sm-border-width) solid var(--sm-border);
+  border-radius: max(0px, calc(var(--sm-radius) - 2px));
+  color: var(--sm-freq-text, inherit);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -180,6 +203,50 @@
   outline-offset: 2px;
 }
 
+/* List layout: one frequency per row with a visible radio button. */
+.sm-frequencies--list { grid-template-columns: 1fr; }
+.sm-frequencies--list .sm-frequency {
+  align-items: center;
+  flex-direction: row;
+  gap: 0.6rem;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0.65rem 0.8rem;
+  text-align: left;
+}
+.sm-frequencies--list .sm-frequency input {
+  accent-color: var(--sm-accent);
+  height: 1rem;
+  opacity: 1;
+  position: static;
+  width: 1rem;
+}
+.sm-frequencies--list .sm-frequency__saving { margin-left: auto; }
+.sm-frequencies--list .sm-frequency:has(input:checked) {
+  background: var(--sm-freq-bg);
+  border-color: var(--sm-accent);
+  box-shadow: inset 0 0 0 1px var(--sm-accent);
+  color: var(--sm-freq-text, inherit);
+}
+
+/* Dropdown layout. */
+.sm-frequencies--dropdown { display: block; }
+.sm-frequency-select {
+  appearance: auto;
+  background: var(--sm-freq-bg);
+  border: var(--sm-border-width) solid var(--sm-border);
+  border-radius: max(0px, calc(var(--sm-radius) - 2px));
+  color: var(--sm-freq-text, inherit);
+  font: inherit;
+  min-height: 2.9rem;
+  padding: 0.55rem 0.75rem;
+  width: 100%;
+}
+.sm-frequency-select:focus-visible {
+  outline: 2px solid var(--sm-accent);
+  outline-offset: 2px;
+}
+
 .sm-note {
   font-size: 0.8em;
   margin: 0;
@@ -187,12 +254,12 @@
 }
 
 /* Leave room under the corner badge so it never covers the price. */
-.sm-option--subscription:has(> .sm-badge:not([hidden])) .sm-option__head { padding-top: 1.55rem; }
+.sm-option--subscription:has(> .sm-badge:not([hidden])) .sm-option__head { padding-top: calc(var(--sm-pad) + 0.6rem); }
 
 @media (max-width: 480px) {
-  .sm-option__body { padding-left: 1rem; }
-  .sm-option--subscription:has(> .sm-badge:not([hidden])) .sm-option__head { padding-top: 1.9rem; }
-  .sm-frequencies { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sm-option__body { padding-left: var(--sm-pad); }
+  .sm-option--subscription:has(> .sm-badge:not([hidden])) .sm-option__head { padding-top: calc(var(--sm-pad) + 0.9rem); }
+  .sm-frequencies--buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* ---------- Cart details ---------- */

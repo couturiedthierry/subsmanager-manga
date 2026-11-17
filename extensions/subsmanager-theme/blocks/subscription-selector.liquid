@@ -2,18 +2,67 @@
   assign selected_product = block.settings.product | default: product
   assign selected_variant = selected_product.selected_or_first_available_variant
   assign allocation_count = selected_variant.selling_plan_allocations.size
-  assign subscription_only = selected_product.requires_selling_plan
   assign product_form_id = 'product-form-' | append: section.id
 
-  # Store-wide switch from the app's Settings page. Missing setting means "on".
+  # Store-wide settings from the app (Settings and Widget pages). Missing settings use the defaults below.
   assign app_settings = shop.metafields.subsmanager.settings.value
+  assign w = app_settings.widget
+
+  assign subscription_only = selected_product.requires_selling_plan
+  if w and w.purchase == 'subscription_only'
+    assign subscription_only = true
+  endif
+
   assign widget_enabled = true
-  if app_settings and app_settings.productWidget == false and subscription_only == false
+  if app_settings and app_settings.productWidget == false and selected_product.requires_selling_plan == false
     assign widget_enabled = false
   endif
 
+  if w
+    assign heading = w.heading
+    assign subscribe_label = w.subscribeLabel
+    assign one_time_label = w.oneTimeLabel
+    assign frequency_label = w.frequencyLabel
+    assign saving_text = w.savingText
+    assign badge_text = w.badgeText
+    assign note = w.note
+    assign benefits = w.benefits
+    assign show_badge = w.showBadge
+    assign show_benefits = w.showBenefits
+    assign show_note = w.showNote
+    assign show_frequency_label = w.showFrequencyLabel
+    assign show_savings = w.showSavings
+    assign frequency_style = w.frequencyStyle
+    assign widget_classes = w.classes
+    assign widget_style = w.style
+    assign default_option = w.defaultOption
+  else
+    assign heading = ''
+    assign subscribe_label = 'Subscribe & save'
+    assign one_time_label = 'One-time purchase'
+    assign frequency_label = 'Deliver every:'
+    assign saving_text = 'save [saving]'
+    assign badge_text = 'SAVE UP TO [saving]'
+    assign note = 'Subscription orders repeat at the frequency you choose. Manage everything from your account.'
+    assign benefits = 'No commitment — pause or cancel anytime|Skip or reschedule deliveries from your account' | split: '|'
+    assign show_badge = true
+    assign show_benefits = true
+    assign show_note = true
+    assign show_frequency_label = true
+    assign show_savings = true
+    assign frequency_style = 'buttons'
+    assign widget_classes = 'sm-widget sm-widget--frequency-buttons'
+    assign widget_style = ''
+    assign default_option = 'subscription'
+  endif
+  if subscription_only
+    unless widget_classes contains 'sm-widget--subscription-only'
+      assign widget_classes = widget_classes | append: ' sm-widget--subscription-only'
+    endunless
+  endif
+
   assign subscribe_by_default = false
-  if block.settings.default_option == 'subscription' or subscription_only
+  if default_option == 'subscription' or subscription_only
     assign subscribe_by_default = true
   endif
 
@@ -30,41 +79,63 @@
   endfor
   assign first_base = first_allocation.compare_at_price | default: selected_variant.price
   assign best_saving_text = best_saving | append: '%'
-  assign badge_label = block.settings.badge_text | replace: '[saving]', best_saving_text
+  assign badge_label = badge_text | replace: '[saving]', best_saving_text
+  if show_savings
+    assign saving_template = saving_text
+  else
+    assign saving_template = ''
+  endif
+  if show_badge
+    assign badge_template = badge_text
+  else
+    assign badge_template = ''
+  endif
 %}
 
 {% if widget_enabled == false and request.design_mode %}
   <p style="border:1px dashed #b4b4b4;border-radius:8px;padding:12px;font-size:14px;opacity:.8">
-    Subscription options are turned off in the SubsManager Manga app (Settings → Product page and customer portal).
+    Subscription options are turned off in the SubsManager Manga app (Settings → Product page).
     Customers don't see this message.
+  </p>
+{% endif %}
+
+{% if widget_enabled and selected_product != blank and allocation_count == 0 and request.design_mode %}
+  <p style="border:1px dashed #b4b4b4;border-radius:8px;padding:12px;font-size:14px;opacity:.8">
+    This product is not in a subscription plan yet, so the subscription options are hidden. Customers don't see this message.
   </p>
 {% endif %}
 
 {% if widget_enabled and selected_product != blank and allocation_count > 0 %}
   {{ 'subsmanager.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'subsmanager.js' | asset_url }}" defer="defer"></script>
+  {% if w and w.customCss != blank %}
+    <style>{{ w.customCss }}</style>
+  {% endif %}
 
   <subsmanager-widget
-    class="sm-widget{% if block.settings.one_time_first %} sm-widget--one-time-first{% endif %}"
+    id="sm-widget-{{ block.id }}"
+    class="{{ widget_classes | escape }}"
     data-product-form="{{ product_form_id }}"
     data-initial-variant="{{ selected_variant.id }}"
-    data-save-template="{{ block.settings.saving_text | escape }}"
-    data-badge-template="{{ block.settings.badge_text | escape }}"
-    style="--sm-accent: {{ block.settings.accent_color }}; --sm-accent-text: {{ block.settings.accent_text_color }}; --sm-surface: {{ block.settings.background_color }}; --sm-border: {{ block.settings.border_color }}; --sm-radius: {{ block.settings.corner_radius }}px;"
+    data-save-template="{{ saving_template | escape }}"
+    data-badge-template="{{ badge_template | escape }}"
+    data-frequency-style="{{ frequency_style | escape }}"
+    {% if subscription_only %}data-subscription-only="true"{% endif %}
+    {% if widget_style != blank %}style="{{ widget_style | escape }}"{% endif %}
     {{ block.shopify_attributes }}
   >
-    {% if block.settings.heading != blank %}
-      <p class="sm-widget__heading">{{ block.settings.heading | escape }}</p>
+    {% if heading != blank %}
+      <p class="sm-widget__heading">{{ heading | escape }}</p>
     {% endif %}
 
     <div
       class="sm-option sm-option--subscription{% if subscribe_by_default %} is-selected{% endif %}"
       data-sm-subscription-option
     >
-      {% if block.settings.show_badge and best_saving > 0 %}
+      {% if show_badge and best_saving > 0 %}
         <span class="sm-badge" data-sm-badge>{{ badge_label | escape }}</span>
       {% else %}
-        <span class="sm-badge" data-sm-badge {% unless block.settings.show_badge %}data-disabled="true"{% endunless %} hidden></span>
+        <span class="sm-badge" data-sm-badge {% unless show_badge %}data-disabled="true"{% endunless %} hidden></span>
       {% endif %}
 
       <label class="sm-option__head">
@@ -76,21 +147,19 @@
           data-purchase-type="subscription"
           {% if subscribe_by_default %}checked{% endif %}
         >
-        <span class="sm-option__title">{{ block.settings.subscribe_label | escape }}</span>
+        <span class="sm-option__title">{{ subscribe_label | escape }}</span>
         <span class="sm-option__price">
           <s class="sm-compare" data-sm-compare {% unless first_base > first_allocation.price %}hidden{% endunless %}>{{ first_base | money }}</s>
-          <strong data-sm-subscription-price>{{ first_allocation.price | money }}</strong>
+          <strong class="sm-subscription-price" data-sm-subscription-price>{{ first_allocation.price | money }}</strong>
         </span>
       </label>
 
       <div class="sm-option__body">
-        {% if block.settings.benefit_1 != blank or block.settings.benefit_2 != blank or block.settings.benefit_3 != blank %}
+        {% if show_benefits and benefits.size > 0 %}
           <ul class="sm-benefits" role="list">
-            {% for i in (1..3) %}
-              {% assign benefit_key = 'benefit_' | append: i %}
-              {% assign benefit = block.settings[benefit_key] %}
+            {% for benefit in benefits %}
               {% if benefit != blank %}
-                <li>
+                <li class="sm-benefit">
                   <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" width="14" height="14"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   <span>{{ benefit | escape }}</span>
                 </li>
@@ -99,33 +168,57 @@
           </ul>
         {% endif %}
 
-        <p class="sm-frequency-label" id="sm-frequency-label-{{ block.id }}">{{ block.settings.frequency_label | escape }}</p>
-        <div class="sm-frequencies" role="radiogroup" aria-labelledby="sm-frequency-label-{{ block.id }}" data-sm-frequencies>
-          {% for allocation in selected_variant.selling_plan_allocations %}
-            {% liquid
-              assign base_price = allocation.compare_at_price | default: selected_variant.price
-              assign saving = 0
-              if base_price > allocation.price
-                assign saving = base_price | minus: allocation.price | times: 100.0 | divided_by: base_price | round
-              endif
-              assign label = allocation.selling_plan.options.first.value | default: allocation.selling_plan.name | remove_first: 'Every ' | remove_first: 'every '
-              assign saving_value = saving | append: '%'
-              assign saving_label = block.settings.saving_text | replace: '[saving]', saving_value
-            %}
-            <label class="sm-frequency">
-              <input
-                type="radio"
-                name="sm-plan-{{ block.id }}"
-                value="{{ allocation.selling_plan.id }}"
-                {% if forloop.first %}checked{% endif %}
-              >
-              <span class="sm-frequency__label">{{ label | escape }}</span>
-              {% if saving > 0 %}
-                <span class="sm-frequency__saving">{{ saving_label | escape }}</span>
-              {% endif %}
-            </label>
-          {% endfor %}
-        </div>
+        {% if show_frequency_label and frequency_label != blank %}
+          <p class="sm-frequency-label" id="sm-frequency-label-{{ block.id }}">{{ frequency_label | escape }}</p>
+        {% endif %}
+        {% if frequency_style == 'dropdown' %}
+          <div class="sm-frequencies sm-frequencies--dropdown" data-sm-frequencies>
+            <select class="sm-frequency-select" name="sm-plan-{{ block.id }}" aria-label="{{ frequency_label | default: 'Delivery frequency' | escape }}" data-sm-plan-select>
+              {% for allocation in selected_variant.selling_plan_allocations %}
+                {% liquid
+                  assign base_price = allocation.compare_at_price | default: selected_variant.price
+                  assign saving = 0
+                  if base_price > allocation.price
+                    assign saving = base_price | minus: allocation.price | times: 100.0 | divided_by: base_price | round
+                  endif
+                  assign label = allocation.selling_plan.options.first.value | default: allocation.selling_plan.name | remove_first: 'Every ' | remove_first: 'every '
+                  assign saving_value = saving | append: '%'
+                  assign saving_label = saving_template | replace: '[saving]', saving_value
+                %}
+                <option value="{{ allocation.selling_plan.id }}" {% if forloop.first %}selected{% endif %}>
+                  {{- label | escape }}{% if saving > 0 and saving_label != blank %} ({{ saving_label | escape }}){% endif -%}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        {% else %}
+          <div class="sm-frequencies sm-frequencies--{{ frequency_style | escape }}" role="radiogroup" aria-label="{{ frequency_label | default: 'Delivery frequency' | escape }}" data-sm-frequencies>
+            {% for allocation in selected_variant.selling_plan_allocations %}
+              {% liquid
+                assign base_price = allocation.compare_at_price | default: selected_variant.price
+                assign saving = 0
+                if base_price > allocation.price
+                  assign saving = base_price | minus: allocation.price | times: 100.0 | divided_by: base_price | round
+                endif
+                assign label = allocation.selling_plan.options.first.value | default: allocation.selling_plan.name | remove_first: 'Every ' | remove_first: 'every '
+                assign saving_value = saving | append: '%'
+                assign saving_label = saving_template | replace: '[saving]', saving_value
+              %}
+              <label class="sm-frequency">
+                <input
+                  type="radio"
+                  name="sm-plan-{{ block.id }}"
+                  value="{{ allocation.selling_plan.id }}"
+                  {% if forloop.first %}checked{% endif %}
+                >
+                <span class="sm-frequency__label">{{ label | escape }}</span>
+                {% if saving > 0 and saving_label != blank %}
+                  <span class="sm-frequency__saving">{{ saving_label | escape }}</span>
+                {% endif %}
+              </label>
+            {% endfor %}
+          </div>
+        {% endif %}
       </div>
     </div>
 
@@ -139,13 +232,13 @@
           data-purchase-type="one-time"
           {% unless subscribe_by_default %}checked{% endunless %}
         >
-        <span class="sm-option__title">{{ block.settings.one_time_label | escape }}</span>
-        <span class="sm-option__price" data-sm-one-time-price>{{ selected_variant.price | money }}</span>
+        <span class="sm-option__title">{{ one_time_label | escape }}</span>
+        <span class="sm-option__price sm-one-time-price" data-sm-one-time-price>{{ selected_variant.price | money }}</span>
       </span>
     </label>
 
-    {% if block.settings.renewal_note != blank %}
-      <p class="sm-note">{{ block.settings.renewal_note | escape }}</p>
+    {% if show_note and note != blank %}
+      <p class="sm-note">{{ note | escape }}</p>
     {% endif %}
 
     <input type="hidden" name="selling_plan" form="{{ product_form_id }}" value="" data-sm-selling-plan disabled>
@@ -190,62 +283,9 @@
   },
   "settings": [
     { "type": "product", "id": "product", "label": "Product", "autofill": true },
-    { "type": "header", "content": "Text" },
-    { "type": "text", "id": "heading", "label": "Heading" },
-    { "type": "text", "id": "subscribe_label", "label": "Subscription option", "default": "Subscribe & save" },
-    { "type": "text", "id": "one_time_label", "label": "One-time option", "default": "One-time purchase" },
-    { "type": "text", "id": "frequency_label", "label": "Frequency label", "default": "Deliver every:" },
     {
-      "type": "text",
-      "id": "saving_text",
-      "label": "Saving under each frequency",
-      "info": "[saving] is replaced with the percentage, for example \"save 20%\".",
-      "default": "save [saving]"
-    },
-    { "type": "text", "id": "benefit_1", "label": "Benefit 1", "default": "No commitment — pause or cancel anytime" },
-    { "type": "text", "id": "benefit_2", "label": "Benefit 2", "default": "Skip or reschedule deliveries from your account" },
-    { "type": "text", "id": "benefit_3", "label": "Benefit 3" },
-    {
-      "type": "text",
-      "id": "renewal_note",
-      "label": "Note under the options",
-      "default": "Subscription orders repeat at the frequency you choose. Manage everything from your account."
-    },
-    { "type": "header", "content": "Savings badge" },
-    { "type": "checkbox", "id": "show_badge", "label": "Show savings badge", "default": true },
-    {
-      "type": "text",
-      "id": "badge_text",
-      "label": "Badge text",
-      "info": "[saving] is replaced with the best available saving.",
-      "default": "SAVE UP TO [saving]"
-    },
-    { "type": "header", "content": "Behavior" },
-    {
-      "type": "select",
-      "id": "default_option",
-      "label": "Selected by default",
-      "options": [
-        { "value": "subscription", "label": "Subscribe & save" },
-        { "value": "one_time", "label": "One-time purchase" }
-      ],
-      "default": "subscription"
-    },
-    { "type": "checkbox", "id": "one_time_first", "label": "Show one-time purchase first", "default": false },
-    { "type": "header", "content": "Style" },
-    { "type": "color", "id": "accent_color", "label": "Selected frequency and badge", "default": "#23395d" },
-    { "type": "color", "id": "accent_text_color", "label": "Text on selected frequency", "default": "#ffffff" },
-    { "type": "color", "id": "background_color", "label": "Selected option background", "default": "#fdf7ef" },
-    { "type": "color", "id": "border_color", "label": "Border", "default": "#e9dcc9" },
-    {
-      "type": "range",
-      "id": "corner_radius",
-      "label": "Corner radius",
-      "min": 0,
-      "max": 24,
-      "step": 2,
-      "unit": "px",
-      "default": 10
+      "type": "paragraph",
+      "content": "Texts, colors, layout, subscription-only mode and custom CSS are set in the SubsManager Manga app → Widget. Changes there apply to every product page."
     }
   ]
 }

@@ -60,6 +60,7 @@ model Shop {
   sealToken            String?
   sealConnectedAt      DateTime?
   sealManualRenewals   Boolean                @default(true)
+  widgetSettings       String?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   contracts            SubscriptionContract[]

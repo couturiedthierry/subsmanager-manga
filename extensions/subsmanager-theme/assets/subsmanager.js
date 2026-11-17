@@ -11,6 +11,8 @@ class SubsManagerWidget extends HTMLElement {
     this.subscriptionPrice = this.querySelector('[data-sm-subscription-price]');
     this.comparePrice = this.querySelector('[data-sm-compare]');
     this.badge = this.querySelector('[data-sm-badge]');
+    this.subscriptionOnly = this.dataset.subscriptionOnly === 'true';
+    this.frequencyStyle = this.dataset.frequencyStyle || 'buttons';
     this.variantData = this.readVariantData();
     this.form = this.findProductForm();
 
@@ -27,7 +29,7 @@ class SubsManagerWidget extends HTMLElement {
 
     this.onChange = (event) => {
       const target = event.target;
-      if (!(target instanceof HTMLInputElement)) return;
+      if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
       // Choosing a frequency also selects the subscription option.
       if (target.closest('[data-sm-frequencies]') && this.subscriptionRadio) this.subscriptionRadio.checked = true;
       this.sync();
@@ -95,7 +97,13 @@ class SubsManagerWidget extends HTMLElement {
   }
 
   selectedPlanId() {
+    const select = this.frequencies?.querySelector('select');
+    if (select) return select.value || '';
     return this.frequencies?.querySelector('input[type="radio"]:checked')?.value || '';
+  }
+
+  savingLabel(saving) {
+    return saving > 0 && this.dataset.saveTemplate ? this.fill(this.dataset.saveTemplate, saving) : '';
   }
 
   renderVariant(variantId) {
@@ -111,38 +119,58 @@ class SubsManagerWidget extends HTMLElement {
     if (this.subscriptionOption) this.subscriptionOption.hidden = allocations.length === 0;
 
     if (allocations.length === 0) {
+      // This variant can't be bought on subscription, so offer the one-time purchase.
       if (this.oneTimeRadio) this.oneTimeRadio.checked = true;
       if (this.oneTimeOption) this.oneTimeOption.hidden = false;
       this.sync();
       return;
     }
+    if (this.subscriptionOnly && this.oneTimeOption) {
+      this.oneTimeOption.hidden = true;
+      if (this.subscriptionRadio) this.subscriptionRadio.checked = true;
+    }
 
     if (this.frequencies) {
       const previous = this.selectedPlanId();
-      const groupName = this.frequencies.querySelector('input')?.name || `sm-plan-${Math.random().toString(36).slice(2)}`;
       const keep = allocations.some((allocation) => allocation.id === previous) ? previous : allocations[0].id;
-      this.frequencies.replaceChildren(
-        ...allocations.map((allocation) => {
-          const label = document.createElement('label');
-          label.className = 'sm-frequency';
-          const input = document.createElement('input');
-          input.type = 'radio';
-          input.name = groupName;
-          input.value = allocation.id;
-          input.checked = allocation.id === keep;
-          const title = document.createElement('span');
-          title.className = 'sm-frequency__label';
-          title.textContent = allocation.label;
-          label.append(input, title);
-          if (allocation.saving > 0) {
-            const saving = document.createElement('span');
-            saving.className = 'sm-frequency__saving';
-            saving.textContent = this.fill(this.dataset.saveTemplate, allocation.saving);
-            label.append(saving);
-          }
-          return label;
-        }),
-      );
+      const select = this.frequencies.querySelector('select');
+      if (select) {
+        select.replaceChildren(
+          ...allocations.map((allocation) => {
+            const option = document.createElement('option');
+            option.value = allocation.id;
+            const saving = this.savingLabel(allocation.saving);
+            option.textContent = saving ? `${allocation.label} (${saving})` : allocation.label;
+            option.selected = allocation.id === keep;
+            return option;
+          }),
+        );
+      } else {
+        const groupName = this.frequencies.querySelector('input')?.name || `sm-plan-${Math.random().toString(36).slice(2)}`;
+        this.frequencies.replaceChildren(
+          ...allocations.map((allocation) => {
+            const label = document.createElement('label');
+            label.className = 'sm-frequency';
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = groupName;
+            input.value = allocation.id;
+            input.checked = allocation.id === keep;
+            const title = document.createElement('span');
+            title.className = 'sm-frequency__label';
+            title.textContent = allocation.label;
+            label.append(input, title);
+            const savingText = this.savingLabel(allocation.saving);
+            if (savingText) {
+              const saving = document.createElement('span');
+              saving.className = 'sm-frequency__saving';
+              saving.textContent = savingText;
+              label.append(saving);
+            }
+            return label;
+          }),
+        );
+      }
     }
 
     if (this.badge) {
@@ -155,6 +183,7 @@ class SubsManagerWidget extends HTMLElement {
   }
 
   sync() {
+    if (this.subscriptionOnly && this.subscriptionRadio && !this.subscriptionOption?.hidden) this.subscriptionRadio.checked = true;
     const subscribed = Boolean(this.subscriptionRadio?.checked && !this.subscriptionOption?.hidden);
     const planId = subscribed ? this.selectedPlanId() : '';
     const allocations = this.currentVariant?.allocations || [];
