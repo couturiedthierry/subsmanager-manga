@@ -9,6 +9,9 @@ A new **Widget** page in the app controls the storefront widget, with a live, cl
 - **Purchase options:** subscription or one-time, or **subscription only** (the one-time option and the
   subscription radio button are hidden); default selection; order; frequencies as buttons, a list, or a dropdown.
 - **Texts:** heading, option names, frequency label, saving text, badge, up to 5 benefits, note.
+- **Delivery frequency names:** rename each frequency from the plans (e.g. "month" → "Monthly") and set a
+  text around every frequency ("Every [frequency]"). The page lists the frequencies found in the Seal plans.
+- **Option circles** are hidden by default (selection shown by border and background); a switch brings them back.
 - **Show or hide:** badge, prices, crossed-out price, benefits, frequency label, savings, note.
 - **Colors** (13, most can use the theme's color), **size and spacing** (text size, radius, border width,
   inner spacing, gap, max width, space above/below).

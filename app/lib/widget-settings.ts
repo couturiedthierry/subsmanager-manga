@@ -10,6 +10,8 @@ export type WidgetSettings = {
   defaultOption: "subscription" | "one_time";
   order: "subscription_first" | "one_time_first";
   frequencyStyle: "buttons" | "dropdown" | "list";
+  frequencyTemplate: string;
+  frequencyNames: Array<{ from: string; to: string }>;
 
   heading: string;
   subscribeLabel: string;
@@ -60,6 +62,8 @@ export const DEFAULT_WIDGET: WidgetSettings = {
   defaultOption: "subscription",
   order: "subscription_first",
   frequencyStyle: "buttons",
+  frequencyTemplate: "[frequency]",
+  frequencyNames: [],
 
   heading: "",
   subscribeLabel: "Subscribe & save",
@@ -106,6 +110,7 @@ export const DEFAULT_WIDGET: WidgetSettings = {
 };
 
 export const MAX_BENEFITS = 5;
+export const MAX_FREQUENCY_NAMES = 20;
 export const MAX_CUSTOM_CSS = 10_000;
 
 /** Color settings that may be left empty to use the theme's own color. */
@@ -124,6 +129,7 @@ const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 function text(value: unknown, fallback: string, max = 200) {
   if (typeof value !== "string") return fallback;
+  // eslint-disable-next-line no-control-regex -- control characters are removed on purpose
   return value.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max);
 }
 
@@ -180,6 +186,14 @@ export function normalizeWidgetSettings(input: unknown): WidgetSettings {
     defaultOption: choice(source.defaultOption, ["subscription", "one_time"] as const, d.defaultOption),
     order: choice(source.order, ["subscription_first", "one_time_first"] as const, d.order),
     frequencyStyle: choice(source.frequencyStyle, ["buttons", "dropdown", "list"] as const, d.frequencyStyle),
+    frequencyTemplate: text(source.frequencyTemplate, d.frequencyTemplate, 60) || d.frequencyTemplate,
+    frequencyNames: (Array.isArray(source.frequencyNames) ? source.frequencyNames : [])
+      .map((entry) => {
+        const row = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
+        return { from: text(row.from, "", 60), to: text(row.to, "", 60) };
+      })
+      .filter((row) => row.from && row.to)
+      .slice(0, MAX_FREQUENCY_NAMES),
 
     heading: text(source.heading, d.heading),
     subscribeLabel: text(source.subscribeLabel, d.subscribeLabel) || d.subscribeLabel,
@@ -236,6 +250,17 @@ export function parseStoredWidget(json: string | null | undefined) {
   } catch {
     return { ...DEFAULT_WIDGET };
   }
+}
+
+/**
+ * The text shown for one delivery frequency: a renamed frequency wins, then the template
+ * ("Every [frequency]") is applied. Mirrors the logic in the theme block.
+ */
+export function frequencyDisplayName(raw: string, w: Pick<WidgetSettings, "frequencyTemplate" | "frequencyNames">) {
+  const key = raw.trim().toLowerCase();
+  const renamed = w.frequencyNames.find((row) => row.from.trim().toLowerCase() === key);
+  const label = renamed ? renamed.to : raw;
+  return (w.frequencyTemplate || "[frequency]").replace("[frequency]", label);
 }
 
 /**

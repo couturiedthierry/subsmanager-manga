@@ -4,7 +4,7 @@
  */
 import widgetCss from "../../extensions/subsmanager-theme/assets/subsmanager.css?raw";
 import widgetJs from "../../extensions/subsmanager-theme/assets/subsmanager.js?raw";
-import { widgetClassList, widgetStyleAttribute, type WidgetSettings } from "./widget-settings";
+import { frequencyDisplayName, widgetClassList, widgetStyleAttribute, type WidgetSettings } from "./widget-settings";
 
 const SAMPLE = {
   oneTime: "$29.99",
@@ -21,18 +21,32 @@ function esc(value: string) {
 
 const fill = (template: string, saving: number) => template.replace("[saving]", `${saving}%`);
 
-export function widgetPreviewHtml(w: WidgetSettings, options: { background?: string } = {}) {
+export function widgetPreviewHtml(
+  w: WidgetSettings,
+  options: { background?: string; frequencies?: string[] } = {},
+) {
+  // Real frequency names from the store's plans when known, otherwise samples.
+  const names = options.frequencies?.length ? options.frequencies.slice(0, 4) : SAMPLE.plans.map((plan) => plan.label);
+  const prices = ["$26.99", "$25.49", "$23.99", "$22.49"];
+  const savings = [10, 15, 20, 25];
+  const plans = names.map((name, index) => ({
+    id: String(101 + index),
+    label: frequencyDisplayName(name, w),
+    price: prices[index],
+    compare: SAMPLE.oneTime,
+    saving: savings[index],
+  }));
   const subscriptionOnly = w.purchase === "subscription_only";
   const subscribed = subscriptionOnly || w.defaultOption === "subscription";
-  const best = Math.max(...SAMPLE.plans.map((plan) => plan.saving));
+  const best = Math.max(...plans.map((plan) => plan.saving));
   const savingTemplate = w.showSavings ? w.savingText : "";
-  const first = SAMPLE.plans[0];
+  const first = plans[0];
 
   const frequencies =
     w.frequencyStyle === "dropdown"
       ? `<div class="sm-frequencies sm-frequencies--dropdown" data-sm-frequencies>
           <select class="sm-frequency-select" aria-label="Delivery frequency" data-sm-plan-select>
-            ${SAMPLE.plans
+            ${plans
               .map((plan, index) => {
                 const saving = savingTemplate ? fill(savingTemplate, plan.saving) : "";
                 return `<option value="${plan.id}"${index === 0 ? " selected" : ""}>${esc(plan.label)}${saving ? ` (${esc(saving)})` : ""}</option>`;
@@ -41,7 +55,7 @@ export function widgetPreviewHtml(w: WidgetSettings, options: { background?: str
           </select>
         </div>`
       : `<div class="sm-frequencies sm-frequencies--${w.frequencyStyle}" role="radiogroup" data-sm-frequencies>
-          ${SAMPLE.plans
+          ${plans
             .map((plan, index) => {
               const saving = savingTemplate ? fill(savingTemplate, plan.saving) : "";
               return `<label class="sm-frequency"><input type="radio" name="sm-plan" value="${plan.id}"${index === 0 ? " checked" : ""}><span class="sm-frequency__label">${esc(plan.label)}</span>${saving ? `<span class="sm-frequency__saving">${esc(saving)}</span>` : ""}</label>`;
@@ -59,7 +73,7 @@ export function widgetPreviewHtml(w: WidgetSettings, options: { background?: str
           .join("")}</ul>`
       : "";
 
-  const variants = JSON.stringify({ "1": { oneTimePrice: SAMPLE.oneTime, allocations: SAMPLE.plans } });
+  const variants = JSON.stringify({ "1": { oneTimePrice: SAMPLE.oneTime, allocations: plans } });
   const classes = widgetClassList(w);
 
   const widget = `

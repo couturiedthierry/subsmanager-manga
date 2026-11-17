@@ -16,11 +16,32 @@ import {
   type WidgetSettings,
 } from "../lib/widget-settings";
 import { widgetPreviewHtml } from "../lib/widget-preview";
+import { getSealClient } from "../models/seal-connection.server";
+import { MAX_FREQUENCY_NAMES } from "../lib/widget-settings";
+
+/** Frequency names as the storefront receives them from the plans (e.g. "month", "2 months"). */
+async function planFrequencyNames(shopDomain: string) {
+  const client = await getSealClient(shopDomain);
+  if (!client) return [];
+  try {
+    const { subscription_rules: rules } = await client.listRules(1);
+    const names = rules.flatMap((rule) =>
+      rule.selling_plans.map((plan) => String(plan.option || plan.name || "").replace(/^every\s+/i, "").trim()),
+    );
+    return Array.from(new Set(names.filter(Boolean))).slice(0, MAX_FREQUENCY_NAMES);
+  } catch {
+    return [];
+  }
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = await ensureShop(session.shop);
-  return { widget: parseStoredWidget(shop.widgetSettings), widgetOn: shop.showProductWidget };
+  return {
+    widget: parseStoredWidget(shop.widgetSettings),
+    widgetOn: shop.showProductWidget,
+    planFrequencies: await planFrequencyNames(session.shop),
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -125,7 +146,7 @@ function Toggle({ label, field, value, update, details }: {
 }
 
 export default function WidgetPage() {
-  const { widget: saved, widgetOn } = useLoaderData<typeof loader>();
+  const { widget: saved, widgetOn, planFrequencies } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const [w, setW] = useState<WidgetSettings>(saved);
@@ -156,12 +177,29 @@ export default function WidgetPage() {
 
   // The preview uses the settings exactly as they will be saved (same validation).
   const preview = useMemo(
-    () => widgetPreviewHtml(normalizeWidgetSettings({ ...w, benefits: w.benefits }), { background: previewBackground }),
-    [w, previewBackground],
+    () =>
+      widgetPreviewHtml(normalizeWidgetSettings({ ...w, benefits: w.benefits }), {
+        background: previewBackground,
+        frequencies: planFrequencies,
+      }),
+    [w, previewBackground, planFrequencies],
   );
 
   const save = () => fetcher.submit({ intent: "save", settings: JSON.stringify(w) }, { method: "POST" });
   const benefitFields = Array.from({ length: MAX_BENEFITS }, (_, index) => w.benefits[index] || "");
+
+  // One row per frequency found in the plans, plus any extra names added by hand.
+  const [extraNames, setExtraNames] = useState<string[]>([]);
+  const knownNames = Array.from(
+    new Set([...planFrequencies, ...w.frequencyNames.map((row) => row.from), ...extraNames]),
+  ).filter((name) => name !== "");
+  const renameValue = (from: string) => w.frequencyNames.find((row) => row.from === from)?.to || "";
+  const setRename = (from: string, to: string) =>
+    setW((current) => {
+      const rest = current.frequencyNames.filter((row) => row.from !== from);
+      return { ...current, frequencyNames: to.trim() ? [...rest, { from, to }] : rest };
+    });
+  const [newName, setNewName] = useState("");
 
   return (
     <s-page heading="Widget">
@@ -275,6 +313,63 @@ export default function WidgetPage() {
             ))}
           </s-stack>
           <s-text-area label="Note under the options" rows={2} value={w.note} onInput={(event) => update("note", event.currentTarget.value)}></s-text-area>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Delivery frequency names">
+        <s-stack direction="block" gap="base">
+          <s-text-field
+            label="Text on each frequency"
+            value={w.frequencyTemplate}
+            details="[frequency] becomes the frequency name, e.g. “Every [frequency]” shows “Every 2 months”."
+            onInput={(event) => update("frequencyTemplate", event.currentTarget.value)}
+          ></s-text-field>
+          {knownNames.length === 0 ? (
+            <s-paragraph color="subdued">
+              No plans found yet. Add a frequency name below (as it appears on the widget) to rename it.
+            </s-paragraph>
+          ) : (
+            <s-table variant="list">
+              <s-table-header-row>
+                <s-table-header listSlot="primary">Frequency in the plan</s-table-header>
+                <s-table-header>Show as</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {knownNames.map((name) => (
+                  <s-table-row key={name}>
+                    <s-table-cell><s-text type="strong">{name}</s-text></s-table-cell>
+                    <s-table-cell>
+                      <s-text-field
+                        label={`Show “${name}” as`}
+                        labelAccessibilityVisibility="exclusive"
+                        placeholder={name}
+                        value={renameValue(name)}
+                        onInput={(event) => setRename(name, event.currentTarget.value)}
+                      ></s-text-field>
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          )}
+          <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="end">
+            <s-text-field
+              label="Add another frequency name"
+              placeholder="e.g. 6 weeks"
+              value={newName}
+              onInput={(event) => setNewName(event.currentTarget.value)}
+            ></s-text-field>
+            <s-button
+              disabled={!newName.trim() || knownNames.length >= MAX_FREQUENCY_NAMES}
+              onClick={() => {
+                setExtraNames((current) => [...current, newName.trim()]);
+                setNewName("");
+              }}
+            >
+              Add
+            </s-button>
+          </s-grid>
+          <s-paragraph color="subdued">Leave “Show as” empty to keep the plan’s own name.</s-paragraph>
         </s-stack>
       </s-section>
 

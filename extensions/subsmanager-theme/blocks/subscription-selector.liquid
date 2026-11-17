@@ -33,6 +33,8 @@
     assign show_frequency_label = w.showFrequencyLabel
     assign show_savings = w.showSavings
     assign frequency_style = w.frequencyStyle
+    assign frequency_template = w.frequencyTemplate | default: '[frequency]'
+    assign frequency_names = w.frequencyNames
     assign widget_classes = w.classes
     assign widget_style = w.style
     assign default_option = w.defaultOption
@@ -51,6 +53,8 @@
     assign show_frequency_label = true
     assign show_savings = true
     assign frequency_style = 'buttons'
+    assign frequency_template = '[frequency]'
+    assign frequency_names = ''
     assign widget_classes = 'sm-widget sm-widget--frequency-buttons sm-widget--no-radios'
     assign widget_style = ''
     assign default_option = 'subscription'
@@ -182,6 +186,15 @@
                     assign saving = base_price | minus: allocation.price | times: 100.0 | divided_by: base_price | round
                   endif
                   assign label = allocation.selling_plan.options.first.value | default: allocation.selling_plan.name | remove_first: 'Every ' | remove_first: 'every '
+                  assign label_key = label | strip | downcase
+                  for renamed in frequency_names
+                    assign from_key = renamed.from | strip | downcase
+                    if from_key == label_key
+                      assign label = renamed.to
+                      break
+                    endif
+                  endfor
+                  assign label = frequency_template | replace: '[frequency]', label
                   assign saving_value = saving | append: '%'
                   assign saving_label = saving_template | replace: '[saving]', saving_value
                 %}
@@ -201,6 +214,15 @@
                   assign saving = base_price | minus: allocation.price | times: 100.0 | divided_by: base_price | round
                 endif
                 assign label = allocation.selling_plan.options.first.value | default: allocation.selling_plan.name | remove_first: 'Every ' | remove_first: 'every '
+                assign label_key = label | strip | downcase
+                for renamed in frequency_names
+                  assign from_key = renamed.from | strip | downcase
+                  if from_key == label_key
+                    assign label = renamed.to
+                    break
+                  endif
+                endfor
+                assign label = frequency_template | replace: '[frequency]', label
                 assign saving_value = saving | append: '%'
                 assign saving_label = saving_template | replace: '[saving]', saving_value
               %}
@@ -257,6 +279,15 @@
                     assign saving = base_price | minus: allocation.price | times: 100.0 | divided_by: base_price | round
                   endif
                   assign label = allocation.selling_plan.options.first.value | default: allocation.selling_plan.name | remove_first: 'Every ' | remove_first: 'every '
+                  assign label_key = label | strip | downcase
+                  for renamed in frequency_names
+                    assign from_key = renamed.from | strip | downcase
+                    if from_key == label_key
+                      assign label = renamed.to
+                      break
+                    endif
+                  endfor
+                  assign label = frequency_template | replace: '[frequency]', label
                 %}
                 {
                   "id": "{{ allocation.selling_plan.id }}",
