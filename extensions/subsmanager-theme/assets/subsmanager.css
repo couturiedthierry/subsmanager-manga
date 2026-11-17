@@ -115,6 +115,23 @@
 /* Benefits and frequencies show only while the subscription option is selected. */
 .sm-option--subscription:not(.is-selected) .sm-option__body { display: none; }
 
+/* Without radio buttons the selected box is shown by its border and background. The input stays
+   in the page (visually hidden) for keyboard and screen-reader users. */
+.sm-widget--no-radios .sm-option .sm-radio {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+.sm-widget--no-radios .sm-option__body { padding-left: var(--sm-pad); }
+.sm-widget--no-radios .sm-option.is-selected { border-color: var(--sm-border-selected, var(--sm-accent)); }
+.sm-widget--no-radios .sm-option:has(.sm-radio:focus-visible) {
+  outline: 2px solid var(--sm-accent);
+  outline-offset: 2px;
+}
+
 /* Subscription only: no one-time option, so the subscription choice needs no radio button. */
 .sm-widget--subscription-only .sm-option--subscription .sm-radio { display: none; }
 .sm-widget--subscription-only .sm-option--subscription .sm-option__head { cursor: default; }

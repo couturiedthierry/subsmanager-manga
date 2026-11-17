@@ -280,6 +280,7 @@ export default function WidgetPage() {
 
       <s-section heading="Show or hide">
         <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+          <Toggle label="Radio buttons (circles) on the options" field="showRadios" value={w.showRadios} update={update} />
           <Toggle label="Savings badge" field="showBadge" value={w.showBadge} update={update} />
           <Toggle label="Prices" field="showPrices" value={w.showPrices} update={update} />
           <Toggle label="Crossed-out original price" field="showComparePrice" value={w.showComparePrice} update={update} />

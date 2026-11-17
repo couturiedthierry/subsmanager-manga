@@ -20,6 +20,7 @@ export type WidgetSettings = {
   benefits: string[];
   note: string;
 
+  showRadios: boolean;
   showBadge: boolean;
   showPrices: boolean;
   showComparePrice: boolean;
@@ -69,6 +70,7 @@ export const DEFAULT_WIDGET: WidgetSettings = {
   benefits: ["No commitment — pause or cancel anytime", "Skip or reschedule deliveries from your account"],
   note: "Subscription orders repeat at the frequency you choose. Manage everything from your account.",
 
+  showRadios: false,
   showBadge: true,
   showPrices: true,
   showComparePrice: true,
@@ -191,6 +193,7 @@ export function normalizeWidgetSettings(input: unknown): WidgetSettings {
       .slice(0, MAX_BENEFITS),
     note: text(source.note, d.note, 400),
 
+    showRadios: bool(source.showRadios, d.showRadios),
     showBadge: bool(source.showBadge, d.showBadge),
     showPrices: bool(source.showPrices, d.showPrices),
     showComparePrice: bool(source.showComparePrice, d.showComparePrice),
@@ -279,6 +282,7 @@ export function widgetClassList(w: WidgetSettings) {
     w.order === "one_time_first" ? "sm-widget--one-time-first" : "",
     w.purchase === "subscription_only" ? "sm-widget--subscription-only" : "",
     `sm-widget--frequency-${w.frequencyStyle}`,
+    w.showRadios ? "" : "sm-widget--no-radios",
     w.showPrices ? "" : "sm-widget--no-prices",
     w.showComparePrice ? "" : "sm-widget--no-compare",
     w.className,
